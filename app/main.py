@@ -35,7 +35,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"project": "AUTOMA X", "orchestrator": "AGENT_00", "status": "RUNNING", "notice": "Protótipo inicial. Agentes e integrações externas ainda precisam ser conectados."}
+    return {"project": "AUTOMA X", "orchestrator": "AGENT_00", "status": "RUNNING", "groq_configured": bool(os.getenv("GROQ_API_KEY", "").strip()), "notice": "Diagnóstico seguro: informa apenas se a variável Groq existe; nunca revela seu valor."}
 
 @app.get("/health")
 def health():
