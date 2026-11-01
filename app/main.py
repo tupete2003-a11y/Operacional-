@@ -78,3 +78,6 @@ def decide_approval(approval_id: str, payload: ApprovalRequest):
 @app.get("/memory")
 def memory():
     return {"recent_messages": store.get_messages()}
+
+# Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
+app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
