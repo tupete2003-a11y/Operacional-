@@ -22,7 +22,7 @@ label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}input,te
 </section>
 <section class="card">
  <strong>Converse com o AGENT_00</strong>
- <p class="hint">Envie uma solicitação. Nesta versão, o sistema cria um plano e seleciona agentes; ainda não executa respostas de IA independentes.</p>
+ <p class="hint">O painel verifica se a conexão com a Groq está configurada antes de enviar solicitações. Os especialistas usam o mesmo provedor de IA com instruções diferentes.</p>
  <label for="message">Sua solicitação</label><textarea id="message" rows="4" placeholder="Ex.: Pesquise ideias para divulgar meu negócio e monte um plano de marketing."></textarea>
  <div class="row" style="margin-top:12px"><button id="send" disabled>Enviar solicitação</button><span id="sendStatus" class="hint"></span></div>
 </section>
@@ -36,7 +36,7 @@ const headers=()=>({'X-API-Key':$('key').value.trim(),'Content-Type':'applicatio
 $('connect').addEventListener('click',async()=>{
  $('connectError').textContent='';$('connection').textContent='Testando...';$('send').disabled=true;
  try{const r=await fetch(base()+'/',{headers:headers()});if(!r.ok)throw new Error(r.status===401?'Chave inválida ou ausente.':'Falha HTTP '+r.status);
- const d=await r.json();$('connection').textContent='Conectado · '+d.status;$('send').disabled=false;
+ const d=await r.json();$('connection').textContent='Conectado · '+d.status+' · Groq: '+(d.groq_configured?'CONFIGURADA':'NÃO CONFIGURADA');$('send').disabled=false;$('connectError').textContent=d.groq_configured?'Provedor de IA detectado.':'A Groq não foi detectada no backend. A variável GROQ_API_KEY precisa estar no serviço automa-x-api.';
  }catch(e){$('connection').textContent='Sem conexão';$('connectError').textContent=e.message+' Confira o endereço e a chave.';}
 });
 $('send').addEventListener('click',async()=>{
