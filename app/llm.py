@@ -2,11 +2,12 @@ import json
 import os
 import urllib.error
 import urllib.request
+from .config import get_groq_api_key
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 def ask_agent(agent, user_request):
-    api_key = os.getenv("GROQ_API_KEY", "").strip()
+    api_key = get_groq_api_key()
     if not api_key:
         raise RuntimeError("GROQ_API_KEY não configurada")
 
