@@ -16,8 +16,8 @@ label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}input,te
  <div class="row"><strong>Conexão com o núcleo</strong><span id="connection" class="status">Não conectado</span></div>
  <label for="api">Endereço da API</label><input id="api" type="url" value="https://automa-x-api.onrender.com" autocomplete="url">
  <label for="key">Chave de acesso (X-API-Key)</label><input id="key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off">
- <div class="row" style="margin-top:14px"><button id="connect">Testar conexão</button></div>
- <p class="hint">A chave é usada somente nesta sessão do navegador e não é salva por esta página. Não a compartilhe.</p>
+ <div class="row" style="margin-top:14px"><button id="connect">Testar conexão</button><button id="forget" type="button" style="background:#34445e">Apagar chave salva</button></div>
+ <p class="hint">A chave pode ser lembrada neste aparelho para facilitar os próximos acessos. Evite ativar isso em aparelhos compartilhados. Ela fica no armazenamento local deste navegador.</p>
  <p id="connectError" class="hint warning"></p>
 </section>
 <section class="card">
@@ -33,10 +33,14 @@ label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}input,te
 const $=id=>document.getElementById(id);
 const base=()=>$('api').value.trim().replace(/\/+$/,'');
 const headers=()=>({'X-API-Key':$('key').value.trim(),'Content-Type':'application/json'});
+const savedKey=localStorage.getItem('automa_x_api_key');
+if(savedKey){$('key').value=savedKey;}
+const savedApi=localStorage.getItem('automa_x_api_url');if(savedApi){$('api').value=savedApi;}
+$('forget').addEventListener('click',()=>{localStorage.removeItem('automa_x_api_key');localStorage.removeItem('automa_x_api_url');$('key').value='';$('send').disabled=true;$('connection').textContent='Chave apagada';$('connectError').textContent='Digite a chave novamente para conectar.';});
 $('connect').addEventListener('click',async()=>{
  $('connectError').textContent='';$('connection').textContent='Testando...';$('send').disabled=true;
  try{const r=await fetch(base()+'/',{headers:headers()});if(!r.ok)throw new Error(r.status===401?'Chave inválida ou ausente.':'Falha HTTP '+r.status);
- const d=await r.json();$('connection').textContent='Conectado · '+d.status+' · Groq: '+(d.groq_configured?'CONFIGURADA':'NÃO CONFIGURADA');$('send').disabled=false;$('connectError').textContent=d.groq_configured?'Provedor de IA detectado.':'A Groq não foi detectada no backend. A variável GROQ_API_KEY precisa estar no serviço automa-x-api.';
+ const d=await r.json();localStorage.setItem('automa_x_api_key',$('key').value.trim());localStorage.setItem('automa_x_api_url',base());$('connection').textContent='Conectado · '+d.status+' · Groq: '+(d.groq_configured?'CONFIGURADA':'NÃO CONFIGURADA');$('send').disabled=false;$('connectError').textContent=d.groq_configured?'Provedor de IA detectado.':'A Groq não foi detectada no backend. A variável GROQ_API_KEY precisa estar no serviço automa-x-api.';
  }catch(e){$('connection').textContent='Sem conexão';$('connectError').textContent=e.message+' Confira o endereço e a chave.';}
 });
 $('send').addEventListener('click',async()=>{
