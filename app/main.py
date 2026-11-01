@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from . import store
 from .agents import list_agents
 from .orchestrator import submit_request
+from .config import get_groq_api_key, get_groq_env_names
 
 app = FastAPI(title="AUTOMA X API", description="Núcleo inicial do sistema multiagente AUTOMA X", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["X-API-Key", "Content-Type"])
@@ -35,7 +36,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"project": "AUTOMA X", "orchestrator": "AGENT_00", "status": "RUNNING", "groq_configured": bool(os.getenv("GROQ_API_KEY", "").strip()), "notice": "Diagnóstico seguro: informa apenas se a variável Groq existe; nunca revela seu valor."}
+    return {"project": "AUTOMA X", "orchestrator": "AGENT_00", "status": "RUNNING", "groq_configured": bool(get_groq_api_key()), "groq_variable_names": get_groq_env_names(), "notice": "Diagnóstico seguro: informa apenas se a variável Groq existe; nunca revela seu valor."}
 
 @app.get("/health")
 def health():
