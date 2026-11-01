@@ -2,12 +2,14 @@ import os
 import secrets
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from . import store
 from .agents import list_agents
 from .orchestrator import submit_request
 
 app = FastAPI(title="AUTOMA X API", description="Núcleo inicial do sistema multiagente AUTOMA X", version="0.1.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["X-API-Key", "Content-Type"])
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
