@@ -39,7 +39,7 @@ def create_plan(request):
 
 def submit_request(request):
     task_id = f"AX-{uuid.uuid4().hex[:10].upper()}"; plan = create_plan(request)
-    task = {"id": task_id, "request": request, "status": "AWAITING_APPROVAL" if plan["approval_required"] else "PLANNED", "plan": plan, "result": {"message": "Plano criado. Configure GROQ_API_KEY no Render para habilitar a execução dos especialistas por IA.", "agent_reports": []}, "created_at": datetime.now(timezone.utc).isoformat()}
+    task = {"id": task_id, "request": request, "status": "AWAITING_APPROVAL" if plan["approval_required"] else "PLANNED", "plan": plan, "result": {"message": "Execução não iniciada: o serviço não detectou GROQ_API_KEY. Confira a variável no serviço automa-x-api (não na interface) e salve as alterações.", "agent_reports": []}, "created_at": datetime.now(timezone.utc).isoformat()}
     store.save_task(task)
     if plan["approval_required"]:
         approval_id = f"APR-{uuid.uuid4().hex[:8].upper()}"
