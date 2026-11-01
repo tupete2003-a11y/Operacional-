@@ -1,0 +1,9 @@
+services:
+  automa-x-api:
+    build: .
+    container_name: automa-x-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
