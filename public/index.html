@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#101827"><title>AUTOMA X | Central de Comando</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#141d30;--line:#29364d;--text:#eef3ff;--muted:#aab6cc;--accent:#70a5ff;--green:#45d6a0;--red:#ff8d8d}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#101a30,#090d18 65%);font:16px system-ui,-apple-system,sans-serif;color:var(--text);min-height:100vh}
+main{max-width:760px;margin:auto;padding:24px 16px 48px}.top{display:flex;align-items:center;gap:12px;margin:10px 0 22px}.logo{width:44px;height:44px;border-radius:14px;background:#233d68;display:grid;place-items:center;font-weight:800;color:#a9caff}.top h1{font-size:21px;margin:0}.sub{color:var(--muted);font-size:13px;margin-top:3px}
+.card{background:rgba(20,29,48,.94);border:1px solid var(--line);border-radius:18px;padding:17px;margin:14px 0;box-shadow:0 12px 35px #0002}
+label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}input,textarea{width:100%;border:1px solid #34445e;background:#0c1424;color:var(--text);border-radius:11px;padding:13px;font:inherit;outline:none}input:focus,textarea:focus{border-color:var(--accent)}button{border:0;border-radius:12px;background:#3979df;color:white;padding:13px 17px;font-weight:700;font-size:15px;cursor:pointer}button:disabled{opacity:.55}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.status{font-size:13px;color:var(--green)}.hint{font-size:12px;color:var(--muted);line-height:1.5}.warning{color:#ffd28a}.bubble{white-space:pre-wrap;overflow-wrap:anywhere;background:#0c1424;border:1px solid var(--line);padding:13px;border-radius:12px;margin:10px 0;font-size:14px}.bubble.user{border-color:#385b91}.bubble.bot{border-color:#315d53}.hidden{display:none}.tag{display:inline-block;background:#233650;color:#c9ddff;padding:5px 8px;border-radius:8px;font-size:12px;margin:3px}
+</style></head>
+<body><main>
+<header class="top"><div class="logo">AX</div><div><h1>AUTOMA X</h1><div class="sub">Central de comando · AGENT_00 OPERACIONAL</div></div></header>
+<section class="card">
+ <div class="row"><strong>Conexão com o núcleo</strong><span id="connection" class="status">Não conectado</span></div>
+ <label for="api">Endereço da API</label><input id="api" type="url" value="https://automa-x-api.onrender.com" autocomplete="url">
+ <label for="key">Chave de acesso (X-API-Key)</label><input id="key" type="password" placeholder="Cole sua chave de acesso" autocomplete="off">
+ <div class="row" style="margin-top:14px"><button id="connect">Testar conexão</button></div>
+ <p class="hint">A chave é usada somente nesta sessão do navegador e não é salva por esta página. Não a compartilhe.</p>
+ <p id="connectError" class="hint warning"></p>
+</section>
+<section class="card">
+ <strong>Converse com o AGENT_00</strong>
+ <p class="hint">Envie uma solicitação. Nesta versão, o sistema cria um plano e seleciona agentes; ainda não executa respostas de IA independentes.</p>
+ <label for="message">Sua solicitação</label><textarea id="message" rows="4" placeholder="Ex.: Pesquise ideias para divulgar meu negócio e monte um plano de marketing."></textarea>
+ <div class="row" style="margin-top:12px"><button id="send" disabled>Enviar solicitação</button><span id="sendStatus" class="hint"></span></div>
+</section>
+<section id="results" class="card hidden"><strong>Retorno do AGENT_00</strong><div id="output"></div></section>
+<footer class="hint" style="text-align:center;margin-top:24px">AUTOMA X · Protótipo inicial · Ações financeiras, externas e irreversíveis exigem aprovação.</footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const base=()=>$('api').value.trim().replace(/\/+$/,'');
+const headers=()=>({'X-API-Key':$('key').value.trim(),'Content-Type':'application/json'});
+$('connect').addEventListener('click',async()=>{
+ $('connectError').textContent='';$('connection').textContent='Testando...';$('send').disabled=true;
+ try{const r=await fetch(base()+'/',{headers:headers()});if(!r.ok)throw new Error(r.status===401?'Chave inválida ou ausente.':'Falha HTTP '+r.status);
+ const d=await r.json();$('connection').textContent='Conectado · '+d.status;$('send').disabled=false;
+ }catch(e){$('connection').textContent='Sem conexão';$('connectError').textContent=e.message+' Confira o endereço e a chave.';}
+});
+$('send').addEventListener('click',async()=>{
+ const message=$('message').value.trim();if(message.length<2){$('sendStatus').textContent='Escreva uma solicitação.';return}
+ $('send').disabled=true;$('sendStatus').textContent='Enviando...';
+ $('results').classList.remove('hidden');$('output').innerHTML='';
+ const user=document.createElement('div');user.className='bubble user';user.textContent='Você: '+message;$('output').append(user);
+ try{
+  const r=await fetch(base()+'/chat',{method:'POST',headers:headers(),body:JSON.stringify({message})});
+  const d=await r.json();if(!r.ok)throw new Error(d.detail||('HTTP '+r.status));
+  const box=document.createElement('div');box.className='bubble bot';
+  const title=document.createElement('strong');title.textContent='AGENT_00 · '+d.status;box.append(title);
+  const p=document.createElement('p');p.textContent='Tarefa: '+d.task_id;box.append(p);
+  const q=document.createElement('p');q.textContent='Agentes selecionados: '+(d.agents_selected||[]).join(', ');box.append(q);
+  const note=document.createElement('p');note.textContent=d.result?.message||d.plan?.note||'Plano recebido.';box.append(note);
+  $('output').append(box);$('message').value='';$('sendStatus').textContent='Solicitação recebida.';
+ }catch(e){$('sendStatus').textContent='Erro: '+e.message;}
+ finally{$('send').disabled=false;}
+});
+</script></body></html>
