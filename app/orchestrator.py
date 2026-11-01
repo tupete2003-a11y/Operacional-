@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from .agents import list_agents
 from . import store
+from .config import get_groq_api_key
 from .llm import ask_agent
 
 AGENT_MAP = {a["id"]: a for a in list_agents()}
@@ -49,7 +50,7 @@ def submit_request(request):
         return task
 
     import os
-    if os.getenv("GROQ_API_KEY", "").strip():
+    if get_groq_api_key():
         reports = []
         for agent_id in plan["selected_agents"]:
             agent = AGENT_MAP[agent_id]
