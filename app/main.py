@@ -18,7 +18,7 @@ async def require_api_key(request: Request, call_next):
         return await call_next(request)
     expected = os.getenv("API_ACCESS_TOKEN", "")
     supplied = request.headers.get("X-API-Key", "")
-    if not expected or not secrets.compare_digest(supplied, expected):
+    if not expected or not secrets.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")):
         return JSONResponse(status_code=401, content={"detail": "API key ausente ou inválida"})
     return await call_next(request)
 
