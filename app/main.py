@@ -1,4 +1,5 @@
 import os
+import logging
 import secrets
 import uuid
 from fastapi import FastAPI, HTTPException, Request
@@ -11,6 +12,8 @@ from .orchestrator import submit_request
 from .config import get_groq_api_key, get_groq_env_names
 from .social import dashboard as social_dashboard, BOTS
 from .llm import ask_agent
+
+logger = logging.getLogger("automa_x.ai")
 
 app = FastAPI(title="AUTOMA X API", description="Núcleo inicial do sistema multiagente AUTOMA X", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["X-API-Key", "Content-Type"])
@@ -122,8 +125,11 @@ def social_draft(payload: SocialDraftRequest):
         store.save_task(task)
         store.create_approval(approval_id, task_id, "Revisar rascunho de " + payload.platform + " · " + bot["name"])
         return {"task_id": task_id, "approval_id": approval_id, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform, "draft": draft, "status": "DRAFT_REVIEW", "approval_required": True}
-    except Exception:
-        raise HTTPException(status_code=502, detail="Não foi possível gerar o rascunho. Verifique a disponibilidade do provedor de IA e tente novamente.")
+    except Exception as exc:
+        logger.error("Falha ao gerar rascunho com IA: %s", str(exc)[:500])
+        key = get_groq_api_key()
+        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
+        raise HTTPException(status_code=502, detail="Falha na geração: " + safe_detail[:500])
 
 # Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
 app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
