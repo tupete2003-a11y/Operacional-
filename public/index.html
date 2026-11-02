@@ -40,7 +40,7 @@ $('forget').addEventListener('click',()=>{localStorage.removeItem('automa_x_api_
 $('connect').addEventListener('click',async()=>{
  $('connectError').textContent='';$('connection').textContent='Testando...';$('send').disabled=true;
  try{const r=await fetch(base()+'/',{headers:headers()});if(!r.ok)throw new Error(r.status===401?'Chave inválida ou ausente.':'Falha HTTP '+r.status);
- const d=await r.json();localStorage.setItem('automa_x_api_key',$('key').value.trim());localStorage.setItem('automa_x_api_url',base());$('connection').textContent='Conectado · '+d.status+' · Groq: '+(d.groq_configured?'CONFIGURADA':'NÃO CONFIGURADA');$('send').disabled=false;$('connectError').textContent=d.groq_configured?'Provedor de IA detectado.':'A Groq não foi detectada no backend. A variável GROQ_API_KEY precisa estar no serviço automa-x-api.';
+ const d=await r.json();localStorage.setItem('automa_x_api_key',$('key').value.trim());localStorage.setItem('automa_x_api_url',base());$('connection').textContent='Conectado · '+d.status+' · Groq: '+(d.groq_configured?'CONFIGURADA':'NÃO CONFIGURADA');$('send').disabled=false;const groqNames=Array.isArray(d.groq_variable_names)?d.groq_variable_names:[];$('connectError').textContent=d.groq_configured?'Provedor de IA detectado.':'Groq não detectada. Variáveis com GROQ no nome: '+(groqNames.length?groqNames.join(', '):'nenhuma')+'. Confira o nome exato GROQ_API_KEY e se o valor foi salvo em automa-x-api.';
  }catch(e){$('connection').textContent='Sem conexão';$('connectError').textContent=e.message+' Confira o endereço e a chave.';}
 });
 $('send').addEventListener('click',async()=>{
