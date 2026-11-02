@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import urllib.error
 import urllib.request
@@ -44,9 +45,18 @@ def ask_agent(agent, user_request):
             data = json.loads(response.read().decode("utf-8"))
         return data["choices"][0]["message"]["content"].strip()
     except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:1000]
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(raw)
+            detail = parsed.get("error", {}).get("message") or parsed.get("message") or "erro não detalhado"
+        except (ValueError, AttributeError):
+            detail = "resposta de erro não reconhecida"
+        detail = str(detail).replace(api_key, "[REDACTED]")
+        detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
+        detail = " ".join(detail.split())[:400]
         raise RuntimeError("Groq HTTP " + str(exc.code) + ": " + detail)
     except (urllib.error.URLError, TimeoutError) as exc:
-        raise RuntimeError("Falha de conexão com Groq: " + str(exc))
+        reason = getattr(exc, "reason", exc)
+        raise RuntimeError("Falha de conexão com Groq: " + str(reason)[:250])
     except (KeyError, IndexError, ValueError) as exc:
-        raise RuntimeError("Resposta inesperada do provedor de IA: " + str(exc))
+        raise RuntimeError("Resposta inesperada do provedor de IA: " + str(exc)[:200])
