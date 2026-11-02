@@ -1,4 +1,5 @@
 from .config import get_groq_api_key
+from . import store
 
 PLATFORMS = ["Instagram", "TikTok", "Facebook", "YouTube", "Kwai"]
 
@@ -12,6 +13,10 @@ BOTS = [
 
 def dashboard():
     ai_ready = bool(get_groq_api_key())
+    tasks = store.list_tasks()
+    approvals = store.list_approvals()
+    pending = sum(1 for item in approvals if item.get("status") == "PENDING")
+    completed = sum(1 for item in tasks if item.get("status") == "COMPLETED")
     return {
         "project":"AUTOMA X",
         "edition":"AI Social Command Center",
@@ -21,6 +26,8 @@ def dashboard():
         "bots_total":len(BOTS),
         "bots":BOTS,
         "platforms":[{"name":name,"connected":False,"status":"Aguardando conexão oficial"} for name in PLATFORMS],
+        "metrics":{"tasks_total":len(tasks),"tasks_completed":completed,"approvals_pending":pending},
+        "recent_tasks":tasks[:8],
         "publishing_enabled":False,
         "publishing_mode":"MANUAL_APPROVAL",
         "notice":"Painel e equipe configurados. IA e publicação externa dependem de credenciais e permissões oficiais."
