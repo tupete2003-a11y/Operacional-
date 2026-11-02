@@ -1,5 +1,6 @@
 import os
 import secrets
+import uuid
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -106,9 +107,23 @@ def social_draft(payload: SocialDraftRequest):
     agent = {"id": bot["id"], "name": bot["name"], "function": bot["description"] + " Responsabilidades: " + "; ".join(bot["responsibilities"])}
     prompt = "Plataforma: " + payload.platform + "\nObjetivo: " + payload.objective + "\nCrie um pacote de conteúdo pronto para revisão humana, com gancho, roteiro/legenda, descrição, hashtags e CTA. Não afirme que publicou."
     try:
-        return {"bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform, "draft": ask_agent(agent, prompt), "status": "DRAFT_REVIEW"}
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Falha ao gerar conteúdo com o provedor de IA: " + str(exc))
+        draft = ask_agent(agent, prompt)
+        task_id = str(uuid.uuid4())
+        approval_id = str(uuid.uuid4())
+        created_at = store.now()
+        task = {
+            "id": task_id,
+            "request": payload.objective,
+            "status": "DRAFT_REVIEW",
+            "plan": {"selected_agents": [bot["id"]], "platform": payload.platform, "workflow": "SOCIAL_CONTENT"},
+            "result": {"draft": draft, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform},
+            "created_at": created_at
+        }
+        store.save_task(task)
+        store.create_approval(approval_id, task_id, "Revisar rascunho de " + payload.platform + " · " + bot["name"])
+        return {"task_id": task_id, "approval_id": approval_id, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform, "draft": draft, "status": "DRAFT_REVIEW", "approval_required": True}
+    except Exception:
+        raise HTTPException(status_code=502, detail="Não foi possível gerar o rascunho. Verifique a disponibilidade do provedor de IA e tente novamente.")
 
 # Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
 app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
