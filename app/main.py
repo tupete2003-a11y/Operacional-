@@ -8,6 +8,8 @@ from . import store
 from .agents import list_agents
 from .orchestrator import submit_request
 from .config import get_groq_api_key, get_groq_env_names
+from .social import dashboard as social_dashboard, BOTS
+from .llm import ask_agent
 
 app = FastAPI(title="AUTOMA X API", description="Núcleo inicial do sistema multiagente AUTOMA X", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["X-API-Key", "Content-Type"])
@@ -24,6 +26,11 @@ async def require_api_key(request: Request, call_next):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=2, max_length=10000)
+
+class SocialDraftRequest(BaseModel):
+    bot_id: str = Field(pattern="^BOT_0[1-5]$")
+    objective: str = Field(min_length=5, max_length=4000)
+    platform: str = Field(default="Instagram", max_length=40)
 
 class ApprovalRequest(BaseModel):
     decision: str = Field(pattern="^(APPROVE|REJECT)$")
@@ -79,6 +86,29 @@ def decide_approval(approval_id: str, payload: ApprovalRequest):
 @app.get("/memory")
 def memory():
     return {"recent_messages": store.get_messages()}
+
+
+@app.get("/social/dashboard")
+def social_home():
+    return social_dashboard()
+
+@app.get("/social/agents")
+def social_agents():
+    return {"total": len(BOTS), "agents": BOTS}
+
+@app.post("/social/draft")
+def social_draft(payload: SocialDraftRequest):
+    if payload.bot_id not in ("BOT_02", "BOT_03"):
+        raise HTTPException(status_code=400, detail="Este bot não é responsável por gerar conteúdo.")
+    if not get_groq_api_key():
+        raise HTTPException(status_code=503, detail="IA ainda não configurada. O painel funciona, mas adicione um provedor de IA ao serviço da API para gerar conteúdo.")
+    bot = next(item for item in BOTS if item["id"] == payload.bot_id)
+    agent = {"id": bot["id"], "name": bot["name"], "function": bot["description"] + " Responsabilidades: " + "; ".join(bot["responsibilities"])}
+    prompt = "Plataforma: " + payload.platform + "\nObjetivo: " + payload.objective + "\nCrie um pacote de conteúdo pronto para revisão humana, com gancho, roteiro/legenda, descrição, hashtags e CTA. Não afirme que publicou."
+    try:
+        return {"bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform, "draft": ask_agent(agent, prompt), "status": "DRAFT_REVIEW"}
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Falha ao gerar conteúdo com o provedor de IA: " + str(exc))
 
 # Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
 app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
