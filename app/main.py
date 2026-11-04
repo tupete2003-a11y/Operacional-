@@ -10,7 +10,8 @@ from . import store
 from .agents import list_agents
 from .orchestrator import submit_request
 from .config import get_groq_api_key, get_groq_env_names
-from .social import dashboard as social_dashboard, BOTS
+from .social import dashboard as social_dashboard, BOTS, PLATFORMS
+from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
 
 logger = logging.getLogger("automa_x.ai")
@@ -35,6 +36,11 @@ class SocialDraftRequest(BaseModel):
     bot_id: str = Field(pattern="^BOT_0[1-5]$")
     objective: str = Field(min_length=5, max_length=4000)
     platform: str = Field(default="Instagram", max_length=40)
+
+class SocialWorkflowRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=4000)
+    platforms: list[str] = Field(default_factory=lambda: list(PLATFORMS), min_length=1, max_length=5)
+    content_types: list[str] = Field(default_factory=lambda: list(CONTENT_TYPES), min_length=1, max_length=5)
 
 class ApprovalRequest(BaseModel):
     decision: str = Field(pattern="^(APPROVE|REJECT)$")
@@ -130,6 +136,46 @@ def social_draft(payload: SocialDraftRequest):
         key = get_groq_api_key()
         safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
         raise HTTPException(status_code=502, detail="Falha na geração: " + safe_detail[:500])
+
+
+@app.post("/social/workflow")
+def social_workflow(payload: SocialWorkflowRequest):
+    unknown_platforms = sorted(set(payload.platforms) - set(PLATFORMS))
+    if unknown_platforms:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Plataforma não suportada.", "invalid_platforms": unknown_platforms},
+        )
+
+    unknown_content_types = sorted(set(payload.content_types) - set(CONTENT_TYPES))
+    if unknown_content_types:
+        raise HTTPException(
+            status_code=422,
+            detail={"message": "Formato de conteúdo não suportado.", "invalid_content_types": unknown_content_types},
+        )
+
+    if len(set(payload.platforms)) != len(payload.platforms):
+        raise HTTPException(status_code=422, detail="Não repita plataformas na mesma solicitação.")
+    if len(set(payload.content_types)) != len(payload.content_types):
+        raise HTTPException(status_code=422, detail="Não repita formatos na mesma solicitação.")
+
+    if not get_groq_api_key():
+        raise HTTPException(
+            status_code=503,
+            detail="IA ainda não configurada. Adicione GROQ_API_KEY nas variáveis do serviço da API.",
+        )
+
+    try:
+        result = generate_social_workflow(payload.model_dump())
+        return result
+    except Exception as exc:
+        logger.error("Falha no fluxo dos cinco bots: %s", str(exc)[:500])
+        key = get_groq_api_key()
+        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
+        raise HTTPException(
+            status_code=502,
+            detail="Falha no fluxo dos cinco bots: " + safe_detail[:500],
+        )
 
 # Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
 app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
