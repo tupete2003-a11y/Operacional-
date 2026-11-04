@@ -52,7 +52,7 @@ def ask_agent(agent, user_request):
         except (ValueError, AttributeError):
             detail = "resposta de erro não reconhecida"
         detail = str(detail).replace(api_key, "[REDACTED]")
-        detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
+        detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
         detail = " ".join(detail.split())[:400]
         raise RuntimeError("Groq HTTP " + str(exc.code) + ": " + detail)
     except (urllib.error.URLError, TimeoutError) as exc:
