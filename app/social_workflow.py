@@ -1,11 +1,12 @@
-
 import json
+import logging
 import uuid
 
 from . import store
 from .llm import ask_agent
 from .social import BOTS, PLATFORMS
 
+logger = logging.getLogger("automa_x.social_workflow")
 
 BUSINESS = {
     "name": "Diamond Refrigeração",
@@ -49,9 +50,7 @@ def _recent_history(limit=12):
         result = task.get("result") or {}
         history.append({
             "request": task.get("request", "")[:180],
-            "result": json.dumps(
-                result, ensure_ascii=False
-            )[:350],
+            "result": json.dumps(result, ensure_ascii=False)[:350],
         })
 
     return history
@@ -60,6 +59,8 @@ def _recent_history(limit=12):
 def generate_social_workflow(payload):
     platforms = payload["platforms"]
     content_types = payload["content_types"]
+    task_id = str(uuid.uuid4())
+    created_at = store.now()
 
     context = {
         "empresa": BUSINESS,
@@ -126,10 +127,44 @@ def generate_social_workflow(payload):
     ]
 
     outputs = {}
+    stage_history = []
+    task = {
+        "id": task_id,
+        "request": payload["objective"],
+        "status": "IN_PROGRESS",
+        "plan": {
+            "selected_agents": [stage[0] for stage in stages],
+            "platforms": platforms,
+            "content_types": content_types,
+            "workflow": "FIVE_BOT_SOCIAL_CAMPAIGN",
+        },
+        "result": {
+            "business": BUSINESS,
+            "outputs": outputs,
+            "stages": stage_history,
+            "approval_required": False,
+            "publishing_enabled": False,
+        },
+        "created_at": created_at,
+    }
+
+    # Save before calling the provider so even an early failure is traceable.
+    store.save_task(task)
 
     for bot_id, title, instruction in stages:
-        previous = json.dumps(outputs, ensure_ascii=False)
+        stage_record = {
+            "bot_id": bot_id,
+            "stage": title,
+            "status": "RUNNING",
+            "started_at": store.now(),
+        }
+        stage_history.append(stage_record)
+        task["result"]["stages"] = stage_history
+        task["result"]["current_stage"] = bot_id
+        store.save_task(task)
+        logger.info("Fluxo %s: início da etapa %s", task_id, bot_id)
 
+        previous = json.dumps(outputs, ensure_ascii=False)
         prompt = (
             "DADOS DA CAMPANHA:\n" + base
             + "\n\nENTREGAS ANTERIORES:\n" + previous
@@ -138,33 +173,37 @@ def generate_social_workflow(payload):
             + "\n\nEntregue conteúdo organizado, objetivo e utilizável."
         )
 
-        outputs[bot_id] = ask_agent(_agent(bot_id), prompt)
+        try:
+            outputs[bot_id] = ask_agent(_agent(bot_id), prompt)
+            stage_record["status"] = "COMPLETED"
+            stage_record["finished_at"] = store.now()
+            task["result"]["outputs"] = outputs
+            task["result"]["stages"] = stage_history
+            task["result"].pop("current_stage", None)
+            store.save_task(task)
+            logger.info("Fluxo %s: etapa %s concluída", task_id, bot_id)
+        except Exception as exc:
+            stage_record["status"] = "FAILED"
+            stage_record["finished_at"] = store.now()
+            stage_record["error"] = str(exc)[:400]
+            task["status"] = "FAILED"
+            task["result"]["outputs"] = outputs
+            task["result"]["stages"] = stage_history
+            task["result"]["failed_stage"] = bot_id
+            task["result"]["error"] = str(exc)[:400]
+            task["result"]["approval_required"] = False
+            store.save_task(task)
+            logger.exception("Fluxo %s: falha na etapa %s", task_id, bot_id)
+            raise RuntimeError(
+                "Fluxo interrompido na etapa " + bot_id
+                + ". O progresso parcial foi registrado na tarefa " + task_id
+            ) from exc
 
-    task_id = str(uuid.uuid4())
     approval_id = str(uuid.uuid4())
-    created_at = store.now()
-
-    task = {
-        "id": task_id,
-        "request": payload["objective"],
-        "status": "DRAFT_REVIEW",
-        "plan": {
-            "selected_agents": [
-                "BOT_05", "BOT_02", "BOT_03", "BOT_04", "BOT_01"
-            ],
-            "platforms": platforms,
-            "content_types": content_types,
-            "workflow": "FIVE_BOT_SOCIAL_CAMPAIGN",
-        },
-        "result": {
-            "business": BUSINESS,
-            "outputs": outputs,
-            "approval_required": True,
-            "publishing_enabled": False,
-        },
-        "created_at": created_at,
-    }
-
+    task["status"] = "DRAFT_REVIEW"
+    task["result"]["approval_required"] = True
+    task["result"]["publishing_enabled"] = False
+    task["result"]["approval_status"] = "PENDING"
     store.save_task(task)
 
     store.create_approval(
@@ -172,6 +211,7 @@ def generate_social_workflow(payload):
         task_id,
         "Revisar campanha completa · Diamond Refrigeração",
     )
+    logger.info("Fluxo %s concluído; aprovação humana %s pendente", task_id, approval_id)
 
     return {
         "task_id": task_id,
@@ -181,4 +221,5 @@ def generate_social_workflow(payload):
         "publishing_enabled": False,
         "business": BUSINESS,
         "outputs": outputs,
+        "stages": stage_history,
     }
