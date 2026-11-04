@@ -59,6 +59,16 @@ def _recent_history(limit=12):
 def generate_social_workflow(payload):
     platforms = payload["platforms"]
     content_types = payload["content_types"]
+    if not isinstance(payload.get("objective"), str) or len(payload["objective"].strip()) < 5:
+        raise ValueError("O objetivo precisa ter pelo menos 5 caracteres.")
+    unknown_platforms = sorted(set(platforms) - set(PLATFORMS))
+    if unknown_platforms:
+        raise ValueError("Plataformas não suportadas: " + ", ".join(unknown_platforms))
+    unknown_content_types = sorted(set(content_types) - set(CONTENT_TYPES))
+    if unknown_content_types:
+        raise ValueError("Formatos não suportados: " + ", ".join(unknown_content_types))
+    if len(set(platforms)) != len(platforms) or len(set(content_types)) != len(content_types):
+        raise ValueError("Não repita plataformas ou formatos na mesma solicitação.")
     task_id = str(uuid.uuid4())
     created_at = store.now()
 
@@ -174,7 +184,10 @@ def generate_social_workflow(payload):
         )
 
         try:
-            outputs[bot_id] = ask_agent(_agent(bot_id), prompt)
+            output = ask_agent(_agent(bot_id), prompt)
+            if not isinstance(output, str) or not output.strip():
+                raise RuntimeError("O provedor de IA retornou uma resposta vazia.")
+            outputs[bot_id] = output.strip()
             stage_record["status"] = "COMPLETED"
             stage_record["finished_at"] = store.now()
             task["result"]["outputs"] = outputs
@@ -190,7 +203,10 @@ def generate_social_workflow(payload):
             task["result"]["outputs"] = outputs
             task["result"]["stages"] = stage_history
             task["result"]["failed_stage"] = bot_id
+            task["result"].pop("current_stage", None)
+            task["result"]["error_type"] = type(exc).__name__
             task["result"]["error"] = str(exc)[:400]
+            task["result"]["failed_at"] = store.now()
             task["result"]["approval_required"] = False
             store.save_task(task)
             logger.exception("Fluxo %s: falha na etapa %s", task_id, bot_id)
@@ -204,13 +220,26 @@ def generate_social_workflow(payload):
     task["result"]["approval_required"] = True
     task["result"]["publishing_enabled"] = False
     task["result"]["approval_status"] = "PENDING"
-    store.save_task(task)
+    task["result"]["approval_id"] = approval_id
+    task["result"]["completed_at"] = store.now()
+    try:
+        store.create_approval(
+            approval_id,
+            task_id,
+            "Revisar campanha completa · Diamond Refrigeração",
+        )
+        store.save_task(task)
+    except Exception as exc:
+        task["status"] = "FAILED"
+        task["result"]["approval_required"] = False
+        task["result"]["approval_status"] = "NOT_CREATED"
+        task["result"]["error_type"] = type(exc).__name__
+        task["result"]["error"] = "Não foi possível registrar a aprovação humana: " + str(exc)[:300]
+        task["result"]["failed_at"] = store.now()
+        store.save_task(task)
+        logger.exception("Fluxo %s: falha ao registrar aprovação humana", task_id)
+        raise RuntimeError("Campanha gerada, mas o registro de aprovação falhou. Tarefa: " + task_id) from exc
 
-    store.create_approval(
-        approval_id,
-        task_id,
-        "Revisar campanha completa · Diamond Refrigeração",
-    )
     logger.info("Fluxo %s concluído; aprovação humana %s pendente", task_id, approval_id)
 
     return {
