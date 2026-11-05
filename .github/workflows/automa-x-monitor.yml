@@ -1,0 +1,95 @@
+name: AUTOMA X production monitor
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: automa-x-production-monitor
+  cancel-in-progress: true
+
+jobs:
+  code-tests:
+    name: Code and workflow tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Compile application
+        run: python -m compileall -q app
+      - name: Run automated tests
+        run: python -m unittest discover -s tests -v
+
+  api-monitor:
+    name: Production API availability
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check API response
+        env:
+          API_ACCESS_TOKEN: ${{ secrets.API_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "$API_ACCESS_TOKEN" ]; then
+            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" \
+              --max-time 20 -H "X-API-Key: $API_ACCESS_TOKEN" \
+              https://automa-x-api.onrender.com/health || true)
+          else
+            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" \
+              --max-time 20 https://automa-x-api.onrender.com/health || true)
+          fi
+          echo "HTTP status: ${CODE:-no response}"
+          if [ "$CODE" = "200" ]; then
+            echo "API health endpoint returned 200."
+          elif [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+            echo "::warning::API is reachable, but /health requires authentication. Add the API_ACCESS_TOKEN repository secret to validate the protected endpoint."
+          else
+            echo "::error::API health check failed or returned an unexpected status."
+            cat /tmp/health.txt || true
+            exit 1
+          fi
+
+  render-deploy-status:
+    name: Render latest deployment status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check latest Render deployment when API key is configured
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::warning::RENDER_API_KEY is not configured. Render deployment state cannot be verified from this workflow."
+            exit 0
+          fi
+          RESPONSE=$(curl --fail --silent --show-error --max-time 20 \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/deploys?limit=1")
+          STATUS=$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print((d[0].get("status") or "") if isinstance(d,list) and d else "")')
+          echo "Latest Render deployment status: ${STATUS:-unknown}"
+          if [ "$STATUS" != "live" ]; then
+            echo "::error::Latest Render deployment is not confirmed live."
+            exit 1
+          fi
+
+  production-validation-boundaries:
+    name: Production validation boundaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report checks that still require safe live validation
+        run: |
+          echo "## AUTOMA X production validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Code compilation and automated tests: executed by the code-tests job." >> "$GITHUB_STEP_SUMMARY"
+          echo "- API availability: checked by the api-monitor job." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Render deployment state: checked only when RENDER_API_KEY is configured." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Live Groq generation, real five-bot workflow, and persistent task/approval storage: NOT certified by mocked unit tests or a health request." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Do not mark the five bots production-ready until dedicated authenticated live tests pass." >> "$GITHUB_STEP_SUMMARY"
