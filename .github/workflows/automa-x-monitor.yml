@@ -96,6 +96,30 @@ jobs:
           echo "- Live Groq generation, real five-bot workflow, and persistent task/approval storage: NOT certified by mocked unit tests or a health request." >> "$GITHUB_STEP_SUMMARY"
           echo "- Do not mark the five bots production-ready until dedicated authenticated live tests pass." >> "$GITHUB_STEP_SUMMARY"
 
+
+  live-production-smoke:
+    name: Live Groq, five bots, task and approval readback
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run opt-in production smoke test
+        env:
+          API_ACCESS_TOKEN: ${{ secrets.API_ACCESS_TOKEN }}
+          AUTOMA_X_API_URL: https://automa-x-api.onrender.com
+        run: |
+          set -euo pipefail
+          if [ -z "$API_ACCESS_TOKEN" ]; then
+            echo "::error::Configure API_ACCESS_TOKEN in GitHub Actions secrets before running the live test."
+            exit 1
+          fi
+          python tests/live_production_smoke.py
+
   alert-on-failure:
     name: Alert on monitor failure
     if: failure()
