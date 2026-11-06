@@ -79,7 +79,7 @@ jobs:
           RESPONSE=$(curl --fail --silent --show-error --max-time 20 \
             -H "Authorization: Bearer $RENDER_API_KEY" \
             "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/deploys?limit=1")
-          STATUS=$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); print((d[0].get("status") or "") if isinstance(d,list) and d else "")')
+          STATUS=$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); item=d[0] if isinstance(d,list) and d else {}; deploy=item.get("deploy", item); print((deploy.get("status") or "") if isinstance(deploy,dict) else "")')
           echo "Latest Render deployment status: ${STATUS:-unknown}"
           if [ "$STATUS" != "live" ]; then
             echo "::error::Latest Render deployment is not confirmed live."
