@@ -131,6 +131,30 @@ def memory():
 def social_home():
     return social_dashboard()
 
+@app.get("/ai/status")
+def ai_status():
+    """Testa a resposta real da Groq sem salvar tarefas nem revelar credenciais."""
+    if not get_groq_api_key():
+        return {"provider": "Groq", "configured": False, "verified": False,
+                "message": "GROQ_API_KEY não encontrada nas variáveis do serviço Render."}
+    try:
+        reply = ask_agent(
+            {"id": "AI_HEALTH_CHECK", "name": "Verificação",
+             "function": "Verifique a conectividade do provedor de IA."},
+            "Responda somente com: AUTOMA X OK"
+        )
+        if not reply or "AUTOMA X OK" not in reply.upper():
+            raise RuntimeError("A Groq respondeu, mas o teste retornou uma resposta inesperada.")
+        return {"provider": "Groq", "configured": True, "verified": True,
+                "message": "Conexão real com a Groq confirmada."}
+    except Exception as exc:
+        logger.warning("Verificação Groq falhou: %s", str(exc)[:400])
+        key = get_groq_api_key()
+        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
+        return {"provider": "Groq", "configured": True, "verified": False,
+                "message": safe_detail[:400]}
+
+
 @app.get("/social/agents")
 def social_agents():
     return {"total": len(BOTS), "agents": BOTS}
