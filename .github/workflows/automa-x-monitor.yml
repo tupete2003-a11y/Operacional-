@@ -41,21 +41,24 @@ jobs:
           API_ACCESS_TOKEN: ${{ secrets.API_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -n "$API_ACCESS_TOKEN" ]; then
-            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" \
-              --max-time 20 -H "X-API-Key: $API_ACCESS_TOKEN" \
-              https://automa-x-api.onrender.com/health || true)
-          else
-            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" \
-              --max-time 20 https://automa-x-api.onrender.com/health || true)
+          if [ -z "$API_ACCESS_TOKEN" ]; then
+            echo "::error::API_ACCESS_TOKEN secret is missing; authenticated health validation cannot run."
+            exit 1
           fi
+          CODE=""
+          for attempt in 1 2 3; do
+            echo "Health check attempt $attempt/3 (allowing cold start)..."
+            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" \
+              --connect-timeout 15 --max-time 100 -H "X-API-Key: $API_ACCESS_TOKEN" \
+              https://automa-x-api.onrender.com/health || true)
+            if [ "$CODE" = "200" ]; then break; fi
+            sleep 10
+          done
           echo "HTTP status: ${CODE:-no response}"
           if [ "$CODE" = "200" ]; then
-            echo "API health endpoint returned 200."
-          elif [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
-            echo "::warning::API is reachable, but /health requires authentication. Add the API_ACCESS_TOKEN repository secret to validate the protected endpoint."
+            echo "Authenticated API health endpoint returned 200."
           else
-            echo "::error::API health check failed or returned an unexpected status."
+            echo "::error::Authenticated API health check failed after retries."
             cat /tmp/health.txt || true
             exit 1
           fi
@@ -94,6 +97,7 @@ jobs:
           echo "- API availability: checked by the api-monitor job." >> "$GITHUB_STEP_SUMMARY"
           echo "- Render deployment state: checked only when RENDER_API_KEY is configured." >> "$GITHUB_STEP_SUMMARY"
           echo "- Live Groq generation, real five-bot workflow, and persistent task/approval storage: NOT certified by mocked unit tests or a health request." >> "$GITHUB_STEP_SUMMARY"
+          echo "- SQLite on a Render Free web service is ephemeral. Configure DATABASE_URL to a durable PostgreSQL provider before claiming restart persistence." >> "$GITHUB_STEP_SUMMARY"
           echo "- Do not mark the five bots production-ready until dedicated authenticated live tests pass." >> "$GITHUB_STEP_SUMMARY"
 
 
