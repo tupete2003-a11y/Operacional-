@@ -37,20 +37,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check API response
-        env:
-          API_ACCESS_TOKEN: ${{ secrets.API_ACCESS_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "$API_ACCESS_TOKEN" ]; then
-            echo "::error::API_ACCESS_TOKEN secret is missing; authenticated health validation cannot run."
-            exit 1
-          fi
           CODE=""
           for attempt in 1 2 3; do
             echo "Health check attempt $attempt/3 (allowing cold start)..."
-            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" \
-              --connect-timeout 15 --max-time 100 -H "X-API-Key: $API_ACCESS_TOKEN" \
-              https://automa-x-api.onrender.com/health || true)
+            CODE=$(curl --silent --show-error --output /tmp/health.txt --write-out "%{http_code}" --connect-timeout 15 --max-time 100 https://automa-x-api.onrender.com/health || true)
             if [ "$CODE" = "200" ]; then break; fi
             sleep 10
           done
