@@ -44,6 +44,26 @@ class StorePersistenceTests(unittest.TestCase):
         refreshed = {row["id"]: row for row in store.list_approvals()}
         self.assertEqual(refreshed["approval-persistence-test"]["status"], "APPROVED")
 
+    def test_schedule_create_list_and_delete(self):
+        schedule = {
+            "id": "schedule-persistence-test",
+            "scheduled_at": "2026-11-07T21:00:00+00:00",
+            "platform": "Instagram",
+            "format": "Vídeo curto",
+            "content": "Roteiro de manutenção preventiva",
+            "status": "PLANNED",
+        }
+        store.create_schedule(
+            schedule["id"], schedule["scheduled_at"], schedule["platform"],
+            schedule["format"], schedule["content"]
+        )
+
+        listed = {row["id"]: row for row in store.list_schedules()}
+        self.assertEqual(listed[schedule["id"]]["content"], schedule["content"])
+        self.assertEqual(listed[schedule["id"]]["status"], "PLANNED")
+        self.assertTrue(store.delete_schedule(schedule["id"]))
+        self.assertFalse(any(row["id"] == schedule["id"] for row in store.list_schedules()))
+
 
 if __name__ == "__main__":
     unittest.main()
