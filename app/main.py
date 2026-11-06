@@ -2,6 +2,7 @@ import os
 import logging
 import secrets
 import uuid
+from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +45,12 @@ class SocialWorkflowRequest(BaseModel):
 
 class ApprovalRequest(BaseModel):
     decision: str = Field(pattern="^(APPROVE|REJECT)$")
+
+class ScheduleRequest(BaseModel):
+    scheduled_at: datetime
+    platform: str = Field(min_length=2, max_length=40)
+    format: str = Field(min_length=2, max_length=60)
+    content: str = Field(min_length=3, max_length=4000)
 
 @app.on_event("startup")
 def startup():
@@ -92,6 +99,27 @@ def decide_approval(approval_id: str, payload: ApprovalRequest):
     if not store.set_approval(approval_id, status):
         raise HTTPException(status_code=404, detail="Aprovação não encontrada")
     return {"approval_id": approval_id, "status": status, "note": "A decisão foi registrada. Nenhuma ação externa é executada por este protótipo."}
+
+@app.get("/schedules")
+def schedules():
+    return {"schedules": store.list_schedules()}
+
+@app.post("/schedules")
+def create_schedule(payload: ScheduleRequest):
+    if payload.platform not in PLATFORMS:
+        raise HTTPException(status_code=422, detail="Plataforma não suportada.")
+    if payload.scheduled_at.tzinfo is None:
+        raise HTTPException(status_code=422, detail="Informe data e horário com fuso horário.")
+    schedule_id = str(uuid.uuid4())
+    scheduled_at = payload.scheduled_at.astimezone(timezone.utc).isoformat()
+    store.create_schedule(schedule_id, scheduled_at, payload.platform, payload.format, payload.content.strip())
+    return {"id": schedule_id, "scheduled_at": scheduled_at, "platform": payload.platform, "format": payload.format, "content": payload.content.strip(), "status": "PLANNED"}
+
+@app.delete("/schedules/{schedule_id}")
+def remove_schedule(schedule_id: str):
+    if not store.delete_schedule(schedule_id):
+        raise HTTPException(status_code=404, detail="Item da agenda não encontrado.")
+    return {"id": schedule_id, "deleted": True}
 
 @app.get("/memory")
 def memory():
