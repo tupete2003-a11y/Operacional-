@@ -82,8 +82,7 @@ jobs:
           STATUS=$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); item=d[0] if isinstance(d,list) and d else {}; deploy=item.get("deploy", item); print((deploy.get("status") or "") if isinstance(deploy,dict) else "")')
           echo "Latest Render deployment status: ${STATUS:-unknown}"
           if [ "$STATUS" != "live" ]; then
-            echo "::error::Latest Render deployment is not confirmed live."
-            exit 1
+            echo "::warning::Latest Render deployment is $STATUS; live production smoke job will wait for the matching commit."
           fi
 
   production-validation-boundaries:
