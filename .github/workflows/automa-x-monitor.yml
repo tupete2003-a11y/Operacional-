@@ -103,7 +103,6 @@ jobs:
 
   live-production-smoke:
     name: Live Groq, five bots, task and approval readback
-    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -112,7 +111,32 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Run opt-in production smoke test
+      - name: Wait for this commit to become the latest live Render deployment
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::error::RENDER_API_KEY is required to wait for the production deploy before smoke testing."
+            exit 1
+          fi
+          for attempt in $(seq 1 30); do
+            RESPONSE=$(curl --fail --silent --show-error --max-time 20 \\
+              -H "Authorization: Bearer $RENDER_API_KEY" \\
+              "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/deploys?limit=5")
+            MATCH=$(printf '%s' "$RESPONSE" | GITHUB_SHA="$GITHUB_SHA" python -c 'import json,os,sys; data=json.load(sys.stdin); items=[x.get("deploy",x) for x in data] if isinstance(data,list) else []; d=next((x for x in items if x.get("commit",{}).get("id")==os.environ["GITHUB_SHA"]),{}); print(d.get("status",""))')
+            echo "Render deployment for this commit: ${MATCH:-not found} (attempt $attempt/30)"
+            if [ "$MATCH" = "live" ]; then exit 0; fi
+            if [ "$MATCH" = "build_failed" ] || [ "$MATCH" = "update_failed" ] || [ "$MATCH" = "canceled" ]; then
+              echo "::error::Render deployment failed with status $MATCH."
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "::error::Timed out waiting for this commit to become live on Render."
+          exit 1
+      - name: Run production smoke test (creates one labeled test task and approval; no publishing)
         env:
           API_ACCESS_TOKEN: ${{ secrets.API_ACCESS_TOKEN }}
           AUTOMA_X_API_URL: https://automa-x-api.onrender.com
