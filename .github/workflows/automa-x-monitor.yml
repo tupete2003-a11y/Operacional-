@@ -113,9 +113,7 @@ jobs:
             exit 1
           fi
           for attempt in $(seq 1 30); do
-            RESPONSE=$(curl --fail --silent --show-error --max-time 20 \\
-              -H "Authorization: Bearer $RENDER_API_KEY" \\
-              "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/deploys?limit=5")
+            RESPONSE=$(curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $RENDER_API_KEY" "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/deploys?limit=5")
             MATCH=$(printf '%s' "$RESPONSE" | GITHUB_SHA="$GITHUB_SHA" python -c 'import json,os,sys; data=json.load(sys.stdin); items=[x.get("deploy",x) for x in data] if isinstance(data,list) else []; d=next((x for x in items if x.get("commit",{}).get("id")==os.environ["GITHUB_SHA"]),{}); print(d.get("status",""))')
             echo "Render deployment for this commit: ${MATCH:-not found} (attempt $attempt/30)"
             if [ "$MATCH" = "live" ]; then exit 0; fi
