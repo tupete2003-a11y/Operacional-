@@ -2,9 +2,10 @@ import os
 import logging
 import secrets
 import uuid
+from pathlib import Path
 from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from . import store
@@ -60,7 +61,7 @@ def startup():
 
 @app.get("/")
 def root():
-    return {"project": "AUTOMA X", "status": "RUNNING", "health": "/health"}
+    return FileResponse(Path(__file__).resolve().parent.parent / "public" / "index.html", media_type="text/html")
 
 @app.get("/health")
 def health():
