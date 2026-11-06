@@ -91,6 +91,7 @@ jobs:
 
 
   live-production-smoke:
+    if: github.event_name == 'workflow_dispatch'
     name: Live Groq, five bots, task and approval readback
     runs-on: ubuntu-latest
     steps:
