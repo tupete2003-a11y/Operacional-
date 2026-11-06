@@ -37,6 +37,8 @@ def init_db():
         statements = [
             "CREATE TABLE IF NOT EXISTS tasks (id TEXT PRIMARY KEY, request TEXT NOT NULL, status TEXT NOT NULL, plan_json TEXT NOT NULL, result_json TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS approvals (id TEXT PRIMARY KEY, task_id TEXT NOT NULL, action TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS schedules (id TEXT PRIMARY KEY, scheduled_at TEXT NOT NULL, platform TEXT NOT NULL, format TEXT NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
+            "CREATE TABLE IF NOT EXISTS schedules (id TEXT PRIMARY KEY, scheduled_at TEXT NOT NULL, platform TEXT NOT NULL, format TEXT NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS messages (id BIGSERIAL PRIMARY KEY, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)",
         ]
     else:
@@ -111,3 +113,21 @@ def list_approvals():
     with connect() as conn:
         rows = _execute(conn, "SELECT * FROM approvals ORDER BY created_at DESC").fetchall()
     return [dict(row) for row in rows]
+
+
+def create_schedule(schedule_id, scheduled_at, platform, content_format, content, status="PLANNED"):
+    with connect() as conn:
+        _execute(conn, "INSERT INTO schedules(id, scheduled_at, platform, format, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (schedule_id, scheduled_at, platform, content_format, content, status, now()))
+
+
+def list_schedules():
+    with connect() as conn:
+        rows = _execute(conn, "SELECT * FROM schedules ORDER BY scheduled_at ASC").fetchall()
+    return [dict(row) for row in rows]
+
+
+def delete_schedule(schedule_id):
+    with connect() as conn:
+        cur = _execute(conn, "DELETE FROM schedules WHERE id=?", (schedule_id,))
+        return cur.rowcount > 0
