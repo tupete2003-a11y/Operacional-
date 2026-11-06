@@ -36,7 +36,8 @@ def ask_agent(agent, user_request):
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": "Bearer " + api_key,
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "User-Agent": "AUTOMA-X/1.0 (backend integration)"
         },
         method="POST"
     )
