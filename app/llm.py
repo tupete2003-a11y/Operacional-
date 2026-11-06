@@ -48,9 +48,15 @@ def ask_agent(agent, user_request):
         raw = exc.read().decode("utf-8", errors="replace")
         try:
             parsed = json.loads(raw)
-            detail = parsed.get("error", {}).get("message") or parsed.get("message") or "erro não detalhado"
-        except (ValueError, AttributeError):
-            detail = "resposta de erro não reconhecida"
+            error = parsed.get("error")
+            if isinstance(error, dict):
+                detail = error.get("message") or error.get("code") or "erro não detalhado"
+            elif isinstance(error, str):
+                detail = error
+            else:
+                detail = parsed.get("message") or parsed.get("detail") or raw or "erro não detalhado"
+        except ValueError:
+            detail = raw or "resposta de erro não reconhecida"
         detail = str(detail).replace(api_key, "[REDACTED]")
         detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
         detail = " ".join(detail.split())[:400]
