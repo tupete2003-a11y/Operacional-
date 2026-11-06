@@ -19,7 +19,7 @@ from .llm import ask_agent
 logger = logging.getLogger("automa_x.ai")
 
 app = FastAPI(title="AUTOMA X API", description="Núcleo inicial do sistema multiagente AUTOMA X", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["X-API-Key", "Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False, allow_methods=["GET", "POST", "DELETE", "OPTIONS"], allow_headers=["X-API-Key", "Content-Type"])
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
