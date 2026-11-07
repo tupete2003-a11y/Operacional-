@@ -1,6 +1,7 @@
 import json
 import re
 import os
+import time
 import urllib.error
 import urllib.request
 from .config import get_groq_api_key
@@ -29,7 +30,7 @@ def ask_agent(agent, user_request):
             {"role": "user", "content": user_request}
         ],
         "temperature": 0.3,
-        "max_tokens": 900
+        "max_tokens": 700
     }
     request = urllib.request.Request(
         GROQ_URL,
@@ -41,27 +42,54 @@ def ask_agent(agent, user_request):
         },
         method="POST"
     )
-    try:
-        with urllib.request.urlopen(request, timeout=45) as response:
-            data = json.loads(response.read().decode("utf-8"))
-        return data["choices"][0]["message"]["content"].strip()
-    except urllib.error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", errors="replace")
+    # A Groq pode aplicar limites temporários de tokens por minuto (HTTP 429).
+    # Aguarda o tempo informado pelo provedor e repete a chamada até 3 vezes.
+    for attempt in range(3):
         try:
-            parsed = json.loads(raw)
-            error = parsed.get("error")
-            if isinstance(error, dict):
-                detail = error.get("message") or error.get("code") or "erro não detalhado"
-            elif isinstance(error, str):
-                detail = error
-            else:
-                detail = parsed.get("message") or parsed.get("detail") or raw or "erro não detalhado"
-        except ValueError:
-            detail = raw or "resposta de erro não reconhecida"
-        detail = str(detail).replace(api_key, "[REDACTED]")
-        detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
-        detail = " ".join(detail.split())[:400]
-        raise RuntimeError("Groq HTTP " + str(exc.code) + ": " + detail)
+            with urllib.request.urlopen(request, timeout=60) as response:
+                data = json.loads(response.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"].strip()
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429 and attempt < 2:
+                raw = exc.read().decode("utf-8", errors="replace")
+                wait_seconds = 20.0
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                if retry_after:
+                    try:
+                        wait_seconds = max(1.0, float(retry_after))
+                    except ValueError:
+                        pass
+                try:
+                    parsed_retry = json.loads(raw)
+                    error_obj = parsed_retry.get("error")
+                    detail_retry = error_obj.get("message", "") if isinstance(error_obj, dict) else str(error_obj or "")
+                    match = re.search(r"try again in ([0-9.]+)s", detail_retry, re.IGNORECASE)
+                    if match:
+                        wait_seconds = max(1.0, float(match.group(1)) + 1.0)
+                except (ValueError, TypeError):
+                    pass
+                wait_seconds = min(wait_seconds, 60.0)
+                time.sleep(wait_seconds)
+                continue
+            # Reprocessa a resposta final (ou outro HTTP error) no tratamento abaixo.
+            if exc.code == 429:
+                raw = exc.read().decode("utf-8", errors="replace")
+                try:
+                    parsed = json.loads(raw)
+                    error = parsed.get("error")
+                    detail = error.get("message") if isinstance(error, dict) else str(error or raw)
+                except ValueError:
+                    detail = raw
+                detail = str(detail).replace(api_key, "[REDACTED]")
+                detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
+                raise RuntimeError("Groq HTTP 429 após novas tentativas: " + " ".join(detail.split())[:350])
+            raise
+        except (urllib.error.URLError, TimeoutError) as exc:
+            reason = getattr(exc, "reason", exc)
+            raise RuntimeError("Falha de conexão com Groq: " + str(reason)[:250])
+        except (KeyError, IndexError, ValueError) as exc:
+            raise RuntimeError("Resposta inesperada do provedor de IA: " + str(exc)[:200])
+
     except (urllib.error.URLError, TimeoutError) as exc:
         reason = getattr(exc, "reason", exc)
         raise RuntimeError("Falha de conexão com Groq: " + str(reason)[:250])
