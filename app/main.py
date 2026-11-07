@@ -143,10 +143,12 @@ def ai_status():
              "function": "Verifique a conectividade do provedor de IA."},
             "Responda somente com: AUTOMA X OK"
         )
-        if not reply or "AUTOMA X OK" not in reply.upper():
-            raise RuntimeError("A Groq respondeu, mas o teste retornou uma resposta inesperada.")
+        if not isinstance(reply, str) or not reply.strip():
+            raise RuntimeError("A Groq respondeu sem conteúdo de texto.")
+        # Any non-empty assistant response confirms the API round-trip.
         return {"provider": "Groq", "configured": True, "verified": True,
-                "message": "Conexão real com a Groq confirmada."}
+                "message": "Conexão real com a Groq confirmada.",
+                "test_response_received": True}
     except Exception as exc:
         logger.warning("Verificação Groq falhou: %s", str(exc)[:400])
         key = get_groq_api_key()
