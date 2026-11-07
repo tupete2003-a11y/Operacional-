@@ -174,7 +174,9 @@ def generate_social_workflow(payload):
         store.save_task(task)
         logger.info("Fluxo %s: início da etapa %s", task_id, bot_id)
 
-        # Limita o contexto acumulado para evitar estourar o TPM do provedor.\n        compact_outputs = {key: value[:1600] for key, value in outputs.items()}\n        previous = json.dumps(compact_outputs, ensure_ascii=False)
+        # Limita o contexto acumulado para evitar estourar o TPM do provedor.
+        compact_outputs = {key: value[:1600] for key, value in outputs.items()}
+        previous = json.dumps(compact_outputs, ensure_ascii=False)
         prompt = (
             "DADOS DA CAMPANHA:\n" + base
             + "\n\nENTREGAS ANTERIORES:\n" + previous
