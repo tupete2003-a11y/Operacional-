@@ -81,7 +81,7 @@ def ask_agent(agent, user_request):
                 except ValueError:
                     detail = raw
                 detail = str(detail).replace(api_key, "[REDACTED]")
-                detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
+                detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
                 raise RuntimeError("Groq HTTP 429 após novas tentativas: " + " ".join(detail.split())[:350])
             raise
         except (urllib.error.URLError, TimeoutError) as exc:
@@ -90,8 +90,3 @@ def ask_agent(agent, user_request):
         except (KeyError, IndexError, ValueError) as exc:
             raise RuntimeError("Resposta inesperada do provedor de IA: " + str(exc)[:200])
 
-    except (urllib.error.URLError, TimeoutError) as exc:
-        reason = getattr(exc, "reason", exc)
-        raise RuntimeError("Falha de conexão com Groq: " + str(reason)[:250])
-    except (KeyError, IndexError, ValueError) as exc:
-        raise RuntimeError("Resposta inesperada do provedor de IA: " + str(exc)[:200])
