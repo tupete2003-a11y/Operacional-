@@ -23,6 +23,11 @@ def ask_agent(agent, user_request):
         "Não envie mensagens, não faça compras, pagamentos, publicações, exclusões "
         "ou alterações em sistemas. Essas ações exigem aprovação humana."
     )
+    try:
+        max_tokens = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "400"))
+    except ValueError:
+        max_tokens = 400
+    max_tokens = max(128, min(max_tokens, 700))
     payload = {
         "model": model,
         "messages": [
@@ -30,7 +35,7 @@ def ask_agent(agent, user_request):
             {"role": "user", "content": user_request}
         ],
         "temperature": 0.3,
-        "max_tokens": 700
+        "max_tokens": max_tokens
     }
     request = urllib.request.Request(
         GROQ_URL,
@@ -42,16 +47,26 @@ def ask_agent(agent, user_request):
         },
         method="POST"
     )
-    # A Groq pode aplicar limites temporários de tokens por minuto (HTTP 429).
-    # Aguarda o tempo informado pelo provedor e repete a chamada até 3 vezes.
-    for attempt in range(3):
+    # Free-tier TPM limits apply across the organization. Honor Retry-After
+    # and the provider's retry hint rather than retrying in a tight loop.
+    for attempt in range(4):
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 data = json.loads(response.read().decode("utf-8"))
-            return data["choices"][0]["message"]["content"].strip()
+            content = data["choices"][0]["message"]["content"]
+            if not isinstance(content, str) or not content.strip():
+                raise RuntimeError("A Groq respondeu sem conteúdo de texto.")
+            return content.strip()
         except urllib.error.HTTPError as exc:
-            if exc.code == 429 and attempt < 2:
-                raw = exc.read().decode("utf-8", errors="replace")
+            raw = exc.read().decode("utf-8", errors="replace")
+            try:
+                parsed = json.loads(raw)
+                error_obj = parsed.get("error")
+                detail = error_obj.get("message", "") if isinstance(error_obj, dict) else str(error_obj or raw)
+                error_code = error_obj.get("code") if isinstance(error_obj, dict) else None
+            except (ValueError, TypeError):
+                detail, error_code = raw, None
+            if exc.code == 429 and attempt < 3:
                 wait_seconds = 20.0
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
                 if retry_after:
@@ -59,31 +74,20 @@ def ask_agent(agent, user_request):
                         wait_seconds = max(1.0, float(retry_after))
                     except ValueError:
                         pass
-                try:
-                    parsed_retry = json.loads(raw)
-                    error_obj = parsed_retry.get("error")
-                    detail_retry = error_obj.get("message", "") if isinstance(error_obj, dict) else str(error_obj or "")
-                    match = re.search(r"try again in ([0-9.]+)s", detail_retry, re.IGNORECASE)
-                    if match:
-                        wait_seconds = max(1.0, float(match.group(1)) + 1.0)
-                except (ValueError, TypeError):
-                    pass
-                wait_seconds = min(wait_seconds, 60.0)
-                time.sleep(wait_seconds)
+                match = re.search(r"try again in ([0-9.]+)s", str(detail), re.IGNORECASE)
+                if match:
+                    wait_seconds = max(wait_seconds, float(match.group(1)) + 1.0)
+                time.sleep(min(wait_seconds, 90.0))
                 continue
-            # Reprocessa a resposta final (ou outro HTTP error) no tratamento abaixo.
+            safe_detail = str(detail).replace(api_key, "[REDACTED]")
+            safe_detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", safe_detail, flags=re.IGNORECASE)
+            safe_detail = " ".join(safe_detail.split())[:350]
             if exc.code == 429:
-                raw = exc.read().decode("utf-8", errors="replace")
-                try:
-                    parsed = json.loads(raw)
-                    error = parsed.get("error")
-                    detail = error.get("message") if isinstance(error, dict) else str(error or raw)
-                except ValueError:
-                    detail = raw
-                detail = str(detail).replace(api_key, "[REDACTED]")
-                detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", detail, flags=re.IGNORECASE)
-                raise RuntimeError("Groq HTTP 429 após novas tentativas: " + " ".join(detail.split())[:350])
-            raise
+                raise RuntimeError("Groq HTTP 429 após aguardar o limite de uso: " + safe_detail)
+            if exc.code == 403:
+                suffix = (" (código " + str(error_code) + ")") if error_code else ""
+                raise RuntimeError("Groq negou a solicitação HTTP 403" + suffix + ": " + safe_detail)
+            raise RuntimeError("Groq HTTP " + str(exc.code) + ": " + safe_detail)
         except (urllib.error.URLError, TimeoutError) as exc:
             reason = getattr(exc, "reason", exc)
             raise RuntimeError("Falha de conexão com Groq: " + str(reason)[:250])
