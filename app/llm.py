@@ -80,7 +80,7 @@ def ask_agent(agent, user_request):
                 time.sleep(min(wait_seconds, 90.0))
                 continue
             safe_detail = str(detail).replace(api_key, "[REDACTED]")
-            safe_detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", safe_detail, flags=re.IGNORECASE)
+            safe_detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", safe_detail, flags=re.IGNORECASE)
             safe_detail = " ".join(safe_detail.split())[:350]
             if exc.code == 429:
                 raise RuntimeError("Groq HTTP 429 após aguardar o limite de uso: " + safe_detail)
