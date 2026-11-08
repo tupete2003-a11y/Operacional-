@@ -54,6 +54,9 @@ FastAPI / API Gateway
 - O serviço da API recebeu `DATABASE_URL` apontando para o banco PostgreSQL Neon já existente `AUTOMA-X`; as variáveis anteriores foram preservadas.
 - A base existente contém tarefas, aprovações e agenda. A tabela de tarefas e a de aprovações mantêm registros anteriores; nenhum dado foi apagado.
 - O fluxo sequencial dos cinco bots já possui registro histórico com as cinco etapas concluídas e aprovação criada.
+- O cliente Groq agora limita a saída padrão a 400 tokens, reduz o contexto entre etapas, respeita o cabeçalho `Retry-After` e espaça as cinco chamadas para reduzir erros HTTP 429 no plano gratuito.
+- O histórico de logs mostrou HTTP 403 com código 1010 em verificações anteriores e HTTP 429 por limite de 8.000 TPM; o código foi melhorado, mas a nova resposta real da Groq ainda precisa ser confirmada após o deploy.
+- A API continua em serviço web gratuito; não foi criado worker separado nem fila Redis/Valkey. O processamento persistente em segundo plano continua pendente, pois um worker sempre ativo no Render exige infraestrutura/planos que não foram autorizados como custo.
 - O endpoint público `/health/ready` foi adicionado para exibir prontidão sem pedir chave para uma consulta somente de leitura.
 - As redes sociais continuam sem conexão OAuth e a publicação externa permanece desativada.
 - A execução ainda é síncrona; worker/fila, recuperação automática e verificação atual da resposta Groq continuam como etapas pendentes de validação.
