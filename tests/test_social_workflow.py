@@ -18,8 +18,8 @@ class SocialWorkflowTests(unittest.TestCase):
     @patch("app.social_workflow.store.list_tasks", return_value=[])
     @patch("app.social_workflow.ask_agent", side_effect=[
         "Ideias", "Conteúdo", "Calendário",
-        "STATUS: APROVADO\\nRevisão completa",
-        "STATUS: APROVADO\\nSupervisão final"
+        "STATUS: APROVADO\nRevisão completa",
+        "STATUS: APROVADO\nSupervisão final"
     ])
     def test_runs_all_five_bots_and_requires_human_approval(
         self, ask_agent, list_tasks, save_task, create_approval, sleep
@@ -36,8 +36,8 @@ class SocialWorkflowTests(unittest.TestCase):
         self.assertEqual(ask_agent.call_count, 5)
         create_approval.assert_called_once()
         self.assertTrue(result["quality_gate"]["status"] == "READY_FOR_HUMAN_REVIEW")
-        self.assertEqual(result["outputs"]["BOT_04"], "STATUS: APROVADO\\nRevisão completa")
-        self.assertEqual(result["outputs"]["BOT_05"], "STATUS: APROVADO\\nSupervisão final")
+        self.assertEqual(result["outputs"]["BOT_04"], "STATUS: APROVADO\nRevisão completa")
+        self.assertEqual(result["outputs"]["BOT_05"], "STATUS: APROVADO\nSupervisão final")
 
     @patch("app.social_workflow.time.sleep")
     @patch("app.social_workflow.store.create_approval")
@@ -64,8 +64,8 @@ class SocialWorkflowTests(unittest.TestCase):
     @patch("app.social_workflow.store.list_tasks", return_value=[])
     @patch("app.social_workflow.ask_agent", side_effect=[
         "Ideias", "Conteúdo", "Calendário",
-        "STATUS: BLOQUEADO\\nPromessa sem comprovação",
-        "STATUS: BLOQUEADO\\nSupervisão mantém o bloqueio"
+        "STATUS: BLOQUEADO\nPromessa sem comprovação",
+        "STATUS: BLOQUEADO\nSupervisão mantém o bloqueio"
     ])
     def test_quality_gate_blocks_when_bot04_or_bot05_blocks(
         self, ask_agent, list_tasks, save_task, create_approval, sleep
