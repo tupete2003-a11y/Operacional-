@@ -8,6 +8,7 @@ from .config import get_groq_api_key
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
+
 def ask_agent(agent, user_request):
     api_key = get_groq_api_key()
     if not api_key:
@@ -16,41 +17,51 @@ def ask_agent(agent, user_request):
     model = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
     system_prompt = (
         "Você é um especialista dentro do sistema AUTOMA X. "
-        "Responda em português do Brasil, com clareza e objetividade. "
+        "Responda em português do Brasil, com clareza, objetividade e conteúdo completo. "
         "Sua função é: " + agent["function"] + " "
-        "Analise somente a solicitação recebida. Entregue: análise, recomendações, "
-        "riscos/limitações e próximos passos. Não afirme que executou ações externas. "
-        "Não envie mensagens, não faça compras, pagamentos, publicações, exclusões "
-        "ou alterações em sistemas. Essas ações exigem aprovação humana."
+        "Analise somente a solicitação recebida. Entregue conteúdo organizado, recomendações, "
+        "riscos/limitações e próximos passos quando forem pertinentes. "
+        "REGRA DE CONFIABILIDADE: nunca invente especificações, funcionalidades, conectividade, "
+        "preços, descontos, percentuais, economia, desempenho, garantias, certificações, "
+        "depoimentos, estatísticas, pesquisas ou tendências. Se uma informação não estiver "
+        "explicitamente nos dados fornecidos, não a apresente como fato; omita-a ou marque "
+        "[PENDENTE DE COMPROVAÇÃO]. Prefira conteúdo educativo neutro quando faltarem fontes. "
+        "Não invente características de produtos nem presuma que um produto possui recursos. "
+        "Não afirme que executou ações externas. Não envie mensagens, não faça compras, "
+        "pagamentos, publicações, exclusões ou alterações em sistemas. Essas ações exigem aprovação humana."
     )
     try:
-        max_tokens = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "400"))
+        max_tokens = int(os.getenv("GROQ_MAX_COMPLETION_TOKENS", "1200"))
     except ValueError:
-        max_tokens = 400
-    max_tokens = max(128, min(max_tokens, 700))
+        max_tokens = 1200
+    # Um mínimo evita que respostas estruturadas sejam marcadas como concluídas pela metade.
+    max_tokens = max(900, min(max_tokens, 1800))
     payload = {
         "model": model,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_request}
         ],
-        "temperature": 0.3,
+        "temperature": 0.2,
         "max_tokens": max_tokens,
         "reasoning_effort": "low"
     }
-    request = urllib.request.Request(
-        GROQ_URL,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Authorization": "Bearer " + api_key,
-            "Content-Type": "application/json",
-            "User-Agent": "AUTOMA-X/1.0 (backend integration)"
-        },
-        method="POST"
-    )
-    # Free-tier TPM limits apply across the organization. Honor Retry-After
-    # and the provider's retry hint rather than retrying in a tight loop.
+
+    def make_request():
+        return urllib.request.Request(
+            GROQ_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": "Bearer " + api_key,
+                "Content-Type": "application/json",
+                "User-Agent": "AUTOMA-X/1.0 (backend integration)"
+            },
+            method="POST"
+        )
+
+    request = make_request()
     empty_response_attempts = 0
+    truncation_retries = 0
     for attempt in range(4):
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
@@ -63,27 +74,30 @@ def ask_agent(agent, user_request):
                     part.get("text", "") for part in content
                     if isinstance(part, dict) and part.get("type") == "text"
                 )
+            finish_reason = str(choice.get("finish_reason") or "").lower()
+
+            if finish_reason == "length":
+                if truncation_retries < 1 and payload["max_tokens"] < 1800:
+                    truncation_retries += 1
+                    payload["max_tokens"] = min(1800, payload["max_tokens"] + 500)
+                    request = make_request()
+                    continue
+                raise RuntimeError(
+                    "A Groq encerrou a resposta por limite de tokens; a etapa não será "
+                    "marcada como concluída com conteúdo incompleto."
+                )
+
             if isinstance(content, str) and content.strip():
                 return content.strip()
             if empty_response_attempts < 1:
                 empty_response_attempts += 1
-                payload["max_tokens"] = min(700, max_tokens + 250)
-                request = urllib.request.Request(
-                    GROQ_URL,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={
-                        "Authorization": "Bearer " + api_key,
-                        "Content-Type": "application/json",
-                        "User-Agent": "AUTOMA-X/1.0 (backend integration)"
-                    },
-                    method="POST"
-                )
+                payload["max_tokens"] = min(1800, payload["max_tokens"] + 250)
+                request = make_request()
                 time.sleep(2)
                 continue
-            finish_reason = str(choice.get("finish_reason") or "desconhecido")
             raise RuntimeError(
                 "A Groq não retornou texto após nova tentativa (finish_reason="
-                + finish_reason + ")."
+                + (finish_reason or "desconhecido") + ")."
             )
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
@@ -108,7 +122,7 @@ def ask_agent(agent, user_request):
                 time.sleep(min(wait_seconds, 90.0))
                 continue
             safe_detail = str(detail).replace(api_key, "[REDACTED]")
-            safe_detail = re.sub(r"Bearer\s+\S+", "Bearer [REDACTED]", safe_detail, flags=re.IGNORECASE)
+            safe_detail = re.sub(r"Bearer\\s+\\S+", "Bearer [REDACTED]", safe_detail, flags=re.IGNORECASE)
             safe_detail = " ".join(safe_detail.split())[:350]
             if exc.code == 429:
                 raise RuntimeError("Groq HTTP 429 após aguardar o limite de uso: " + safe_detail)
@@ -121,4 +135,3 @@ def ask_agent(agent, user_request):
             raise RuntimeError("Falha de conexão com Groq: " + str(reason)[:250])
         except (KeyError, IndexError, ValueError) as exc:
             raise RuntimeError("Resposta inesperada do provedor de IA: " + str(exc)[:200])
-
