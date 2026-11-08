@@ -149,12 +149,9 @@ def generate_social_workflow(payload):
 
     base = json.dumps(context, ensure_ascii=False, indent=2)
 
+    # A ordem garante que a revisão veja também o calendário e que a supervisão
+    # operacional final avalie o pacote completo antes de criar a aprovação humana.
     stages = [
-        (
-            "BOT_05",
-            "ESTRATÉGIA CENTRAL",
-            "Defina a estratégia da campanha, público, objetivos, mensagens principais e distribuição das entregas."
-        ),
         (
             "BOT_02",
             "IDEIAS E REDAÇÃO",
@@ -166,14 +163,19 @@ def generate_social_workflow(payload):
             "Monte o pacote solicitado. Para banners, entregue título, subtítulo, CTA e direção visual. Para carrosséis, detalhe cada slide. Para vídeos, detalhe cenas, narração e textos na tela. Adapte legendas e hashtags a cada plataforma. Não gere arquivos de imagem nem publique."
         ),
         (
-            "BOT_04",
-            "REVISÃO E CONTROLE",
-            "Revise clareza, ortografia, diversidade, adequação às redes, consistência da marca e segurança das ofertas. Corrija promessas exageradas e identifique informações pendentes."
-        ),
-        (
             "BOT_01",
             "CALENDÁRIO EDITORIAL",
-            "Organize as entregas em um calendário sugerido, distribuindo formatos e plataformas. Sugira dias e faixas de horário como hipóteses para teste, não como horários comprovadamente ideais. Evite conflitos e repetição."
+            "Organize as entregas em um calendário único, coerente com o objetivo, formatos e plataformas. Use a mesma frequência em todas as partes do plano; não crie metas conflitantes. Sugira dias e faixas de horário apenas como hipóteses para teste, nunca como horários comprovadamente ideais. Evite conflitos e repetição."
+        ),
+        (
+            "BOT_04",
+            "REVISÃO FINAL E CONTROLE DE QUALIDADE",
+            "Você é a barreira de qualidade antes da supervisão operacional. Revise TODAS as entregas anteriores, inclusive o calendário. Confira consistência entre frequência, datas, plataformas, formatos, público, ofertas e CTAs. Identifique alegações sem fonte, promessas, números, benefícios, funcionalidades, preços e condições não comprovados; não trate a triagem automática como prova. Corrija o que puder sem inventar dados e liste claramente o que continua pendente. Comece sua resposta obrigatoriamente com exatamente uma destas linhas: STATUS: APROVADO ou STATUS: BLOQUEADO. Só use APROVADO se não houver contradições, dados inventados ou pendências relevantes; caso contrário, use BLOQUEADO."
+        ),
+        (
+            "BOT_05",
+            "SUPERVISÃO OPERACIONAL FINAL",
+            "Atue como supervisor central depois de receber ideias, produção, calendário e revisão do BOT_04. Verifique se todos os agentes entregaram, se o calendário é único e consistente, se as pendências apontadas pelo BOT_04 foram resolvidas e se existem riscos ou contradições. Não ignore nem sobrescreva bloqueios do BOT_04. Informe o que está pronto, o que está bloqueado e a próxima ação segura. Comece sua resposta obrigatoriamente com exatamente uma destas linhas: STATUS: APROVADO ou STATUS: BLOQUEADO. Só use APROVADO se o BOT_04 aprovou explicitamente e não houver pendências relevantes."
         ),
     ]
 
@@ -265,6 +267,18 @@ def generate_social_workflow(payload):
     task["status"] = "DRAFT_REVIEW"
     task["result"]["approval_required"] = True
     task["result"]["fact_check"] = _fact_check_outputs(outputs)
+    bot04_status = "APPROVED" if outputs.get("BOT_04", "").strip().upper().startswith("STATUS: APROVADO") else "BLOCKED"
+    bot05_status = "APPROVED" if outputs.get("BOT_05", "").strip().upper().startswith("STATUS: APROVADO") else "BLOCKED"
+    fact_check_clear = task["result"]["fact_check"]["claim_count"] == 0
+    quality_gate_passed = bot04_status == "APPROVED" and bot05_status == "APPROVED" and fact_check_clear
+    task["result"]["quality_gate"] = {
+        "status": "READY_FOR_HUMAN_REVIEW" if quality_gate_passed else "BLOCKED",
+        "bot04_review": bot04_status,
+        "bot05_supervision": bot05_status,
+        "automatic_fact_screening_clear": fact_check_clear,
+        "reason": None if quality_gate_passed else "A revisão, a supervisão ou a triagem automática identificou pendências. Corrija e execute novamente antes de considerar a campanha pronta.",
+        "external_publication_allowed": False,
+    }
     task["result"]["publishing_enabled"] = False
     task["result"]["approval_status"] = "PENDING"
     task["result"]["approval_id"] = approval_id
@@ -296,6 +310,7 @@ def generate_social_workflow(payload):
         "approval_required": True,
         "test_mode": test_mode,
         "fact_check": task["result"]["fact_check"],
+        "quality_gate": task["result"]["quality_gate"],
         "publishing_enabled": False,
         "business": business,
         "outputs": outputs,
