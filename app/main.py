@@ -59,6 +59,7 @@ class SocialDraftRequest(BaseModel):
     platform: str = Field(default="Instagram", max_length=40)
 
 class SocialWorkflowRequest(BaseModel):
+    test_mode: bool = False
     objective: str = Field(min_length=5, max_length=4000)
     platforms: list[str] = Field(default_factory=lambda: list(PLATFORMS), min_length=1, max_length=5)
     content_types: list[str] = Field(default_factory=lambda: list(CONTENT_TYPES), min_length=1, max_length=5)
