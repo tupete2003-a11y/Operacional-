@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import uuid
+import time
 
 from . import store
 from .llm import ask_agent
@@ -154,7 +155,10 @@ def generate_social_workflow(payload):
 
     store.save_task(task)
 
-    for bot_id, title, instruction in stages:
+    for stage_index, (bot_id, title, instruction) in enumerate(stages):
+        # Pace sequential calls so the five-agent workflow stays within free-tier TPM limits.
+        if stage_index:
+            time.sleep(15)
         stage_record = {
             "bot_id": bot_id,
             "stage": title,
