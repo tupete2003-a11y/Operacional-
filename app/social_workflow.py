@@ -21,40 +21,40 @@ CONTENT_TYPES = {
 
 
 def _fact_check_outputs(outputs):
-    """Sinaliza afirmações comerciais/tecnológicas que exigem fonte documental."""
-    patterns = [
-        ("percentual_ou_estatistica", r"\b\d+(?:[.,]\d+)?\s*%"),
-        ("economia_ou_desempenho", r"\b(?:economiz\w*|reduz\w* consumo|baixo consumo|alta eficiência|mais eficiente|menor consumo)\b"),
-        ("recurso_tecnico", r"\b(?:controle via app|aplicativo|wi-?fi|bluetooth|inverter|smart|inteligente|conectividade|alerta pelo celular)\b"),
-        ("garantia_ou_certificacao", r"\b(?:garantia de|certificad\w*|aprovado pelo|homologad\w*|selo procel|inmetro)\b"),
-        ("depoimento_ou_resultado", r"\b(?:depoimento|cliente satisfeito|resultado comprovado|aumentou as vendas|economia comprovada)\b"),
-    ]
+    """Triagem conservadora: remove formatação e sinaliza apenas alegações concretas."""
+    import html
     findings = []
+    patterns = [
+        ("percentual_ou_estatistica", re.compile(r"\\b\\d+(?:[.,]\\d+)?\\s*%", re.IGNORECASE)),
+        ("economia_ou_desempenho", re.compile(r"\\b(?:economiza(?:r|ndo|rá|ria)?\\s+(?:até\\s+)?\\d|reduz(?:ir|indo|irá)?\\s+(?:o\\s+)?consumo|consome\\s+\\d|economia\\s+comprovada|redução\\s+de\\s+consumo)\\b", re.IGNORECASE)),
+        ("recurso_tecnico", re.compile(r"\\b(?:controle\\s+(?:total\\s+)?(?:via|pelo)\\s+app|controle\\s+por\\s+aplicativo|fala\\s+com\\s+seu\\s+celular|conecta(?:do)?\\s+(?:ao|com)\\s+(?:seu\\s+)?celular|wi-?fi|bluetooth|alerta(?:s)?\\s+(?:pelo|no)\\s+celular|inverter)\\b", re.IGNORECASE)),
+        ("garantia_ou_certificacao", re.compile(r"\\b(?:garantia\\s+de\\s+\\d|certificad[oa]\\s+(?:pelo|por)|aprovad[oa]\\s+pelo|homologad[oa]|selo\\s+procel|inmetro)\\b", re.IGNORECASE)),
+        ("depoimento_ou_resultado", re.compile(r"\\b(?:depoimento\\s+(?:real|de\\s+cliente)|cliente\\s+afirma|resultado\\s+comprovado|aumentou\\s+as\\s+vendas|economia\\s+comprovada)\\b", re.IGNORECASE)),
+    ]
     for bot_id, output in outputs.items():
-        text = output if isinstance(output, str) else ""
+        raw = output if isinstance(output, str) else ""
+        clean = html.unescape(raw)
+        clean = re.sub(r"<br\\s*/?>", " ", clean, flags=re.IGNORECASE)
+        clean = re.sub(r"<[^>]+>", " ", clean)
+        clean = re.sub(r"```.*?```", " ", clean, flags=re.DOTALL)
+        clean = re.sub(r"[#*_>|]", " ", clean)
+        clean = re.sub(r"\\s+", " ", clean).strip()
         for category, pattern in patterns:
-            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-                start = max(0, match.start() - 90)
-                end = min(len(text), match.end() + 120)
-                findings.append({
-                    "bot_id": bot_id,
-                    "category": category,
-                    "claim_excerpt": " ".join(text[start:end].split())[:240],
-                    "status": "UNVERIFIED_SOURCE_REQUIRED",
-                })
-                if len(findings) >= 40:
-                    break
-            if len(findings) >= 40:
-                break
-        if len(findings) >= 40:
-            break
+            for match in pattern.finditer(clean):
+                excerpt = clean[max(0, match.start() - 90):min(len(clean), match.end() + 120)]
+                if re.search(r"(?:não\\s+(?:afirme|prometa|invent)|sem\\s+(?:promessas?|depoimentos?)|(?:evite|remova|não\\s+usar)\\s+(?:a\\s+)?(?:alegação|afirmação|depoimento))", excerpt, re.IGNORECASE):
+                    continue
+                findings.append({"bot_id": bot_id, "category": category, "claim_excerpt": excerpt[:240], "status": "UNVERIFIED_SOURCE_REQUIRED"})
+                if len(findings) >= 40: break
+            if len(findings) >= 40: break
+        if len(findings) >= 40: break
     return {
         "status": "REVIEW_REQUIRED" if findings else "NO_AUTOMATIC_FLAGS",
-        "method": "rule_based_screening_not_external_fact_verification",
+        "method": "conservative_rule_based_screening_not_external_fact_verification",
         "unverified_claims": findings,
         "claim_count": len(findings),
         "publishing_blocked_until_human_review": True,
-        "note": "A ausência de alertas não comprova a veracidade. Alegações comerciais precisam de fonte documental ou confirmação do responsável.",
+        "note": "A triagem identifica padrões de alegações; não comprova a veracidade. Confirme especificações e benefícios na ficha técnica/manual do produto antes da publicação.",
     }
 
 
@@ -135,6 +135,8 @@ def generate_social_workflow(payload):
             "Não invente percentuais, economia, desempenho, funcionalidades, conectividade, certificações, garantias, depoimentos ou resultados de produtos.",
             "Só mencione especificações de produto que estejam explicitamente no pedido ou na configuração da marca; mesmo assim, sinalize que a comprovação documental deve ser revisada antes da publicação.",
             "Quando faltar fonte, substitua a alegação por [PENDENTE DE COMPROVAÇÃO] ou formule uma pergunta neutra sem afirmar o benefício.",
+            "Não crie exemplos de produtos como se fossem produtos reais. Se o produto/modelo e a ficha técnica não forem fornecidos, use conteúdo educativo neutro e liste as informações necessárias para completar a campanha.",
+            "Não use depoimentos fictícios nem simule demonstrações de aplicativos, telas, recursos ou funcionalidades que não foram fornecidos.",
             "Use somente dados de marca e contatos presentes na configuração ou no pedido.",
             "Se faltarem dados comerciais essenciais, sinalize como informação pendente.",
             "Varie temas, ganchos, títulos e formatos em relação ao histórico.",
