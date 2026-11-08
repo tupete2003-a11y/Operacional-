@@ -48,19 +48,29 @@ FastAPI / API Gateway
        +-- Adaptadores oficiais das plataformas
 ```
 
+## Estado publicado em 8 de novembro de 2026
+
+- Frontend e backend foram implantados no Render a partir do commit `17e2f0efcfc35c7cd239c989fbbe853a22c1b1a3`.
+- O serviço da API recebeu `DATABASE_URL` apontando para o banco PostgreSQL Neon já existente `AUTOMA-X`; as variáveis anteriores foram preservadas.
+- A base existente contém tarefas, aprovações e agenda. A tabela de tarefas e a de aprovações mantêm registros anteriores; nenhum dado foi apagado.
+- O fluxo sequencial dos cinco bots já possui registro histórico com as cinco etapas concluídas e aprovação criada.
+- O endpoint público `/health/ready` foi adicionado para exibir prontidão sem pedir chave para uma consulta somente de leitura.
+- As redes sociais continuam sem conexão OAuth e a publicação externa permanece desativada.
+- A execução ainda é síncrona; worker/fila, recuperação automática e verificação atual da resposta Groq continuam como etapas pendentes de validação.
+
 ## Componentes e estado atual
 
 | Componente | Estado observado | Próxima evolução |
 |---|---|---|
-| Frontend | Painel web existente | Conectar todos os módulos à API e remover estados fictícios |
-| API FastAPI | Implantada no Render | Endpoints versionados, sessão segura e telemetria |
+| Frontend | Painel web publicado no Render; leitura pública de prontidão adicionada | Finalizar conexão dos módulos e testes de interface |
+| API FastAPI | Publicada no Render; /health/ready informa API, banco, IA configurada e estado social sem expor segredos | Endpoints versionados, sessão segura e telemetria |
 | Chave API | Token via cabeçalho X-API-Key | Manter compatibilidade e evoluir para sessão HttpOnly sem expor segredos |
 | Groq | Adaptador existente | Verificação automática, limites, retries e interface multi-provedor |
 | Cinco bots | Definições e fluxo sequencial existentes | Execução assíncrona, eventos, retomada, timeout e validação de saída |
 | Tarefas | Persistidas por store | Estados detalhados, histórico de eventos e idempotência |
 | Aprovações | Persistência básica | Aprovação ligada à versão exata do conteúdo e auditoria |
 | Agenda | Persistência básica | Worker de agendamento, fuso horário, locks e reprogramação |
-| Banco | SQLite ou PostgreSQL conforme DATABASE_URL | PostgreSQL para produção e migração validada |
+| Banco | PostgreSQL Neon AUTOMA-X conectado ao serviço Render por DATABASE_URL; registros existentes preservados | Verificar leitura/gravação pelo backend após reinício e adicionar backup/restore |
 | Fila | Ainda não confirmada | Redis/Valkey e worker separado |
 | Redes sociais | Não conectadas | OAuth e APIs oficiais, uma plataforma por vez |
 | Publicação | Desativada | Somente após conexão, escopos, revisão e aprovação humana |
@@ -72,7 +82,7 @@ FastAPI / API Gateway
 - A autenticação atual por X-API-Key deve continuar funcionando até que uma migração de sessão esteja implantada e validada.
 - Para sessão web futura: cookie Secure, HttpOnly, SameSite apropriado, expiração, logout, proteção CSRF e CORS restrito ao domínio real do painel.
 - Não armazenar credenciais de API em localStorage na arquitetura final.
-- Diagnósticos públicos limitam-se a /health. Diagnósticos detalhados exigem autenticação.
+- Diagnóstico público /health/ready expõe somente sinais mínimos (API, conexão do banco, presença de configuração da IA e plataformas não conectadas); detalhes e operações exigem autenticação.
 
 ## Execução e recuperação
 
