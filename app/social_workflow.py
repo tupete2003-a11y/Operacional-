@@ -23,11 +23,11 @@ CONTENT_TYPES = {
 def _fact_check_outputs(outputs):
     """Sinaliza afirmações comerciais/tecnológicas que exigem fonte documental."""
     patterns = [
-        ("percentual_ou_estatistica", r"\\b\\d+(?:[.,]\\d+)?\\s*%"),
-        ("economia_ou_desempenho", r"\\b(?:economiz\\w*|reduz\\w* consumo|baixo consumo|alta eficiência|mais eficiente|menor consumo)\\b"),
-        ("recurso_tecnico", r"\\b(?:controle via app|aplicativo|wi-?fi|bluetooth|inverter|smart|inteligente|conectividade|alerta pelo celular)\\b"),
-        ("garantia_ou_certificacao", r"\\b(?:garantia de|certificad\\w*|aprovado pelo|homologad\\w*|selo procel|inmetro)\\b"),
-        ("depoimento_ou_resultado", r"\\b(?:depoimento|cliente satisfeito|resultado comprovado|aumentou as vendas|economia comprovada)\\b"),
+        ("percentual_ou_estatistica", r"\b\d+(?:[.,]\d+)?\s*%"),
+        ("economia_ou_desempenho", r"\b(?:economiz\w*|reduz\w* consumo|baixo consumo|alta eficiência|mais eficiente|menor consumo)\b"),
+        ("recurso_tecnico", r"\b(?:controle via app|aplicativo|wi-?fi|bluetooth|inverter|smart|inteligente|conectividade|alerta pelo celular)\b"),
+        ("garantia_ou_certificacao", r"\b(?:garantia de|certificad\w*|aprovado pelo|homologad\w*|selo procel|inmetro)\b"),
+        ("depoimento_ou_resultado", r"\b(?:depoimento|cliente satisfeito|resultado comprovado|aumentou as vendas|economia comprovada)\b"),
     ]
     findings = []
     for bot_id, output in outputs.items():
