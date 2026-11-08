@@ -137,3 +137,19 @@ def check_connection():
     with connect() as conn:
         row = conn.execute("SELECT 1").fetchone()
     return bool(row)
+
+
+def list_agent_execution_history(limit=100):
+    """Retorna histórico recente de etapas de agentes para status baseado em execução real."""
+    with connect() as conn:
+        rows = _execute(conn, "SELECT id, status, created_at, result_json FROM tasks ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+    items = []
+    for row in rows:
+        item = dict(row)
+        raw = item.pop("result_json", None)
+        try:
+            item["result"] = json.loads(raw) if raw else {}
+        except (TypeError, ValueError):
+            item["result"] = {}
+        items.append(item)
+    return items
