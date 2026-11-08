@@ -45,7 +45,7 @@ def _agent(bot_id):
     }
 
 
-def _recent_history(limit=4):
+def _recent_history(limit=2):
     history = []
 
     for item in store.list_tasks()[:limit]:
@@ -56,7 +56,7 @@ def _recent_history(limit=4):
         result = task.get("result") or {}
         history.append({
             "request": task.get("request", "")[:120],
-            "result": json.dumps(result, ensure_ascii=False)[:180],
+            "result": json.dumps(result, ensure_ascii=False)[:100],
         })
 
     return history
@@ -167,7 +167,7 @@ def generate_social_workflow(payload):
         store.save_task(task)
         logger.info("Fluxo %s: início da etapa %s", task_id, bot_id)
 
-        compact_outputs = {key: value[:1600] for key, value in outputs.items()}
+        compact_outputs = {key: value[:900] for key, value in outputs.items()}
         previous = json.dumps(compact_outputs, ensure_ascii=False)
         prompt = (
             "DADOS DA CAMPANHA:\n" + base
