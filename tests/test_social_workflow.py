@@ -47,12 +47,12 @@ class SocialWorkflowTests(unittest.TestCase):
     def test_failure_is_saved_and_stops_the_remaining_bots(
         self, ask_agent, list_tasks, save_task, create_approval, sleep
     ):
-        with self.assertRaisesRegex(RuntimeError, "BOT_02"):
+        with self.assertRaisesRegex(RuntimeError, "BOT_03"):
             generate_social_workflow(self.payload)
 
         failed_task = save_task.call_args_list[-1].args[0]
         self.assertEqual(failed_task["status"], "FAILED")
-        self.assertEqual(failed_task["result"]["failed_stage"], "BOT_02")
+        self.assertEqual(failed_task["result"]["failed_stage"], "BOT_03")
         self.assertFalse(failed_task["result"]["approval_required"])
         self.assertEqual(ask_agent.call_count, 2)
         create_approval.assert_not_called()
