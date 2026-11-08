@@ -131,3 +131,9 @@ def delete_schedule(schedule_id):
     with connect() as conn:
         cur = _execute(conn, "DELETE FROM schedules WHERE id=?", (schedule_id,))
         return cur.rowcount > 0
+
+def check_connection():
+    """Verifica conectividade real do banco sem alterar dados."""
+    with connect() as conn:
+        row = conn.execute("SELECT 1").fetchone()
+    return bool(row)
