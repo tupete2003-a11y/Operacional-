@@ -64,8 +64,10 @@ async function runFiveBotValidationOnce(){
  const validationKey='automa_x_five_bot_validation_v1:'+apiUrl;
  let previous=null;
  try{previous=JSON.parse(localStorage.getItem(validationKey)||'null')}catch(_){}
- if(previous)return;
- const record={status:'RUNNING',started_at:new Date().toISOString()};
+ // Bloqueia somente execuções já concluídas ou ainda recentes; falhas podem ser tentadas novamente.
+ if(previous?.status==='COMPLETED')return;
+ if(previous?.status==='RUNNING' && previous.started_at && (Date.now()-Date.parse(previous.started_at)<10*60*1000))return;
+ const record={status:'RUNNING',started_at:new Date().toISOString(),retry_of:previous?.status==='FAILED'?'FAILED':undefined};
  try{localStorage.setItem(validationKey,JSON.stringify(record))}catch(_){}
  $('draftStatus').textContent='Groq confirmada. Iniciando uma validação única dos cinco agentes...';
  $('draftResult').textContent='Teste técnico interno: BOT_05 → BOT_02 → BOT_03 → BOT_04 → BOT_01. O conteúdo será identificado como teste e ficará aguardando sua revisão; nenhuma publicação será feita.';
