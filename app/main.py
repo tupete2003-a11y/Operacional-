@@ -23,7 +23,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
-    if request.method == "OPTIONS" or request.url.path in {"/", "/health", "/auth/check"}:
+    if request.method == "OPTIONS" or request.url.path in {"/", "/health", "/health/ready", "/auth/check"}:
         return await call_next(request)
     expected = os.getenv("API_ACCESS_TOKEN", "").strip()
     supplied = request.headers.get("X-API-Key", "").strip()
@@ -85,6 +85,28 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/health/ready")
+def readiness():
+    """Estado público mínimo para a tela inicial; não expõe segredos nem dados de usuários."""
+    try:
+        database_connected = store.check_connection()
+    except Exception:
+        database_connected = False
+    storage_backend = store.backend()
+    return {
+        "status": "ready" if database_connected else "degraded",
+        "api": "online",
+        "database": {
+            "backend": storage_backend,
+            "connected": database_connected,
+            "durable": storage_backend == "postgresql" and database_connected,
+        },
+        "ai": {"provider": "Groq", "configured": bool(get_groq_api_key())},
+        "bots": {"registered": len(BOTS)},
+        "social": {"platforms_registered": len(PLATFORMS), "connected": 0},
+        "publishing": {"enabled": False},
+    }
 
 @app.get("/agents")
 def agents():
