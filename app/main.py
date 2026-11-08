@@ -146,6 +146,50 @@ def memory():
     return {"recent_messages": store.get_messages()}
 
 
+@app.get("/system/status")
+def system_status():
+    """Resumo operacional real; não executa publicações nem altera dados."""
+    try:
+        database_ok = store.check_connection()
+        database_error = None
+    except Exception as exc:
+        database_ok = False
+        database_error = type(exc).__name__
+
+    provider_configured = bool(get_groq_api_key())
+    storage_backend = store.backend()
+    return {
+        "api": {"status": "online", "version": app.version},
+        "database": {
+            "backend": storage_backend,
+            "connected": database_ok,
+            "durable_backend": storage_backend == "postgresql",
+            "error_type": database_error,
+        },
+        "ai": {
+            "provider": "Groq",
+            "configured": provider_configured,
+            "verified": None,
+            "verification_endpoint": "/ai/status",
+            "note": "configured indica apenas presença da chave; verified exige chamada real ao provedor.",
+        },
+        "bots": {
+            "registered": len(BOTS),
+            "ids": [bot["id"] for bot in BOTS],
+            "execution_verified": False,
+            "note": "Cadastro não equivale a execução validada de ponta a ponta.",
+        },
+        "social_platforms": [
+            {"name": name, "connected": False, "publishing_enabled": False}
+            for name in PLATFORMS
+        ],
+        "safety": {
+            "external_publishing_enabled": False,
+            "human_approval_required": True,
+        },
+    }
+
+
 @app.get("/social/dashboard")
 def social_home():
     return social_dashboard()
