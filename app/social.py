@@ -1,3 +1,5 @@
+import os
+
 from .config import get_groq_api_key
 from . import store
 
@@ -11,24 +13,44 @@ BOTS = [
     {"id":"BOT_05","name":"Master Operacional","role":"Comando central","icon":"brain","color":"cyan","description":"Supervisiona os quatro bots, monitora falhas e apresenta o estado geral do sistema.","responsibilities":["Supervisão geral e relatórios","Monitoramento de falhas","Regras de segurança e aprovação"],"status":"CONFIGURED_NOT_VALIDATED"},
 ]
 
+
 def dashboard():
     ai_ready = bool(get_groq_api_key())
+    storage_backend = store.backend()
+    storage_durable = storage_backend == "postgresql"
     tasks = store.list_tasks()
     approvals = store.list_approvals()
     pending = sum(1 for item in approvals if item.get("status") == "PENDING")
     completed = sum(1 for item in tasks if item.get("status") == "COMPLETED")
+
+    if not ai_ready:
+        notice = "API disponível. Provedor de IA ainda não foi detectado; geração inteligente está indisponível."
+    elif not storage_durable:
+        notice = "Groq configurada. Atenção: o armazenamento atual é SQLite; em hospedagem efêmera, os dados podem não sobreviver a reinicializações."
+    else:
+        notice = "API, provedor de IA configurado e banco PostgreSQL detectados. A conexão real com a IA deve ser verificada separadamente."
+
     return {
-        "project":"AUTOMA X",
-        "edition":"AI Social Command Center",
-        "status":"ONLINE",
-        "ai_provider_configured":ai_ready,
-        "ai_provider":"Groq" if ai_ready else None,
-        "bots_total":len(BOTS),
-        "bots":BOTS,
-        "platforms":[{"name":name,"connected":False,"status":"Aguardando conexão oficial"} for name in PLATFORMS],
-        "metrics":{"tasks_total":len(tasks),"tasks_completed":completed,"approvals_pending":pending},
-        "recent_tasks":tasks[:8],
-        "publishing_enabled":False,
-        "publishing_mode":"MANUAL_APPROVAL",
-        "notice":"Os cinco bots estão configurados, mas ainda não foram validados em execução real. Publicação externa permanece desativada e exige aprovação humana."
+        "project": "AUTOMA X",
+        "edition": "AI Social Command Center",
+        "status": "ATTENTION" if (not ai_ready or not storage_durable) else "READY",
+        "ai_provider_configured": ai_ready,
+        "ai_provider": "Groq" if ai_ready else None,
+        "storage": {
+            "backend": storage_backend,
+            "durable": storage_durable,
+            "note": "PostgreSQL configurado." if storage_durable else "SQLite detectado; confirme disco persistente ou migre para PostgreSQL gerenciado."
+        },
+        "bots_total": len(BOTS),
+        "bots": BOTS,
+        "platforms": [{"name": name, "connected": False, "status": "Aguardando conexão oficial"} for name in PLATFORMS],
+        "metrics": {
+            "tasks_total": len(tasks),
+            "tasks_completed": completed,
+            "approvals_pending": pending
+        },
+        "recent_tasks": tasks[:8],
+        "publishing_enabled": False,
+        "publishing_mode": "MANUAL_APPROVAL",
+        "notice": notice
     }
