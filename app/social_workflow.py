@@ -3,6 +3,7 @@ import logging
 import os
 import uuid
 import time
+import re
 
 from . import store
 from .llm import ask_agent
@@ -17,6 +18,44 @@ CONTENT_TYPES = {
     "video": "Roteiro de vídeo curto",
     "text": "Texto comercial ou educativo",
 }
+
+
+def _fact_check_outputs(outputs):
+    """Sinaliza afirmações comerciais/tecnológicas que exigem fonte documental."""
+    patterns = [
+        ("percentual_ou_estatistica", r"\\b\\d+(?:[.,]\\d+)?\\s*%"),
+        ("economia_ou_desempenho", r"\\b(?:economiz\\w*|reduz\\w* consumo|baixo consumo|alta eficiência|mais eficiente|menor consumo)\\b"),
+        ("recurso_tecnico", r"\\b(?:controle via app|aplicativo|wi-?fi|bluetooth|inverter|smart|inteligente|conectividade|alerta pelo celular)\\b"),
+        ("garantia_ou_certificacao", r"\\b(?:garantia de|certificad\\w*|aprovado pelo|homologad\\w*|selo procel|inmetro)\\b"),
+        ("depoimento_ou_resultado", r"\\b(?:depoimento|cliente satisfeito|resultado comprovado|aumentou as vendas|economia comprovada)\\b"),
+    ]
+    findings = []
+    for bot_id, output in outputs.items():
+        text = output if isinstance(output, str) else ""
+        for category, pattern in patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                start = max(0, match.start() - 90)
+                end = min(len(text), match.end() + 120)
+                findings.append({
+                    "bot_id": bot_id,
+                    "category": category,
+                    "claim_excerpt": " ".join(text[start:end].split())[:240],
+                    "status": "UNVERIFIED_SOURCE_REQUIRED",
+                })
+                if len(findings) >= 40:
+                    break
+            if len(findings) >= 40:
+                break
+        if len(findings) >= 40:
+            break
+    return {
+        "status": "REVIEW_REQUIRED" if findings else "NO_AUTOMATIC_FLAGS",
+        "method": "rule_based_screening_not_external_fact_verification",
+        "unverified_claims": findings,
+        "claim_count": len(findings),
+        "publishing_blocked_until_human_review": True,
+        "note": "A ausência de alertas não comprova a veracidade. Alegações comerciais precisam de fonte documental ou confirmação do responsável.",
+    }
 
 
 def _business_profile():
@@ -93,6 +132,9 @@ def generate_social_workflow(payload):
             "Quando faltarem condições de uma promoção, escreva condição a definir.",
             "Não invente avaliações, depoimentos ou resultados.",
             "Não invente tendências, visualizações ou métricas.",
+            "Não invente percentuais, economia, desempenho, funcionalidades, conectividade, certificações, garantias, depoimentos ou resultados de produtos.",
+            "Só mencione especificações de produto que estejam explicitamente no pedido ou na configuração da marca; mesmo assim, sinalize que a comprovação documental deve ser revisada antes da publicação.",
+            "Quando faltar fonte, substitua a alegação por [PENDENTE DE COMPROVAÇÃO] ou formule uma pergunta neutra sem afirmar o benefício.",
             "Use somente dados de marca e contatos presentes na configuração ou no pedido.",
             "Se faltarem dados comerciais essenciais, sinalize como informação pendente.",
             "Varie temas, ganchos, títulos e formatos em relação ao histórico.",
@@ -216,6 +258,7 @@ def generate_social_workflow(payload):
     approval_id = str(uuid.uuid4())
     task["status"] = "DRAFT_REVIEW"
     task["result"]["approval_required"] = True
+    task["result"]["fact_check"] = _fact_check_outputs(outputs)
     task["result"]["publishing_enabled"] = False
     task["result"]["approval_status"] = "PENDING"
     task["result"]["approval_id"] = approval_id
@@ -245,6 +288,7 @@ def generate_social_workflow(payload):
         "approval_id": approval_id,
         "status": "DRAFT_REVIEW",
         "approval_required": True,
+        "fact_check": task["result"]["fact_check"],
         "publishing_enabled": False,
         "business": business,
         "outputs": outputs,
