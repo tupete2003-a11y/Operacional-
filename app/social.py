@@ -23,6 +23,36 @@ def dashboard():
     pending = sum(1 for item in approvals if item.get("status") == "PENDING")
     completed = sum(1 for item in tasks if item.get("status") == "COMPLETED")
 
+    # Status por agente vem da última etapa registrada no PostgreSQL, nunca do cadastro estático.
+    latest_by_bot = {}
+    for task in store.list_agent_execution_history(100):
+        result = task.get("result") or {}
+        for stage in result.get("stages") or []:
+            bot_id = stage.get("bot_id")
+            if bot_id and bot_id not in latest_by_bot:
+                latest_by_bot[bot_id] = {
+                    "status": stage.get("status", "UNKNOWN"),
+                    "finished_at": stage.get("finished_at"),
+                    "task_id": task.get("id"),
+                }
+    bots = []
+    for original in BOTS:
+        bot = dict(original)
+        latest = latest_by_bot.get(bot["id"])
+        bot["last_execution"] = latest
+        if latest and latest["status"] == "COMPLETED":
+            bot["status"] = "EXECUTION_COMPLETED"
+            bot["status_label"] = "ÚLTIMA EXECUÇÃO CONCLUÍDA"
+            bot["validated"] = True
+        elif latest and latest["status"] == "FAILED":
+            bot["status"] = "EXECUTION_FAILED"
+            bot["status_label"] = "FALHA NA ÚLTIMA EXECUÇÃO"
+            bot["validated"] = False
+        else:
+            bot["status"] = "NOT_EXECUTED"
+            bot["status_label"] = "AGUARDANDO PRIMEIRA EXECUÇÃO"
+            bot["validated"] = False
+
     if not ai_ready:
         notice = "API disponível. Provedor de IA ainda não foi detectado; geração inteligente está indisponível."
     elif not storage_durable:
@@ -42,7 +72,7 @@ def dashboard():
             "note": "PostgreSQL configurado." if storage_durable else "SQLite detectado; confirme disco persistente ou migre para PostgreSQL gerenciado."
         },
         "bots_total": len(BOTS),
-        "bots": BOTS,
+        "bots": bots,
         "platforms": [{"name": name, "connected": False, "status": "Aguardando conexão oficial"} for name in PLATFORMS],
         "metrics": {
             "tasks_total": len(tasks),
