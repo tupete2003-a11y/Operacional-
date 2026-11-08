@@ -35,7 +35,8 @@ def ask_agent(agent, user_request):
             {"role": "user", "content": user_request}
         ],
         "temperature": 0.3,
-        "max_tokens": max_tokens
+        "max_tokens": max_tokens,
+        "reasoning_effort": "low"
     }
     request = urllib.request.Request(
         GROQ_URL,
@@ -49,14 +50,41 @@ def ask_agent(agent, user_request):
     )
     # Free-tier TPM limits apply across the organization. Honor Retry-After
     # and the provider's retry hint rather than retrying in a tight loop.
+    empty_response_attempts = 0
     for attempt in range(4):
         try:
             with urllib.request.urlopen(request, timeout=60) as response:
                 data = json.loads(response.read().decode("utf-8"))
-            content = data["choices"][0]["message"]["content"]
-            if not isinstance(content, str) or not content.strip():
-                raise RuntimeError("A Groq respondeu sem conteúdo de texto.")
-            return content.strip()
+            choice = data.get("choices", [{}])[0]
+            message = choice.get("message") or {}
+            content = message.get("content")
+            if isinstance(content, list):
+                content = "\\n".join(
+                    part.get("text", "") for part in content
+                    if isinstance(part, dict) and part.get("type") == "text"
+                )
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+            if empty_response_attempts < 1:
+                empty_response_attempts += 1
+                payload["max_tokens"] = min(700, max_tokens + 250)
+                request = urllib.request.Request(
+                    GROQ_URL,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Authorization": "Bearer " + api_key,
+                        "Content-Type": "application/json",
+                        "User-Agent": "AUTOMA-X/1.0 (backend integration)"
+                    },
+                    method="POST"
+                )
+                time.sleep(2)
+                continue
+            finish_reason = str(choice.get("finish_reason") or "desconhecido")
+            raise RuntimeError(
+                "A Groq não retornou texto após nova tentativa (finish_reason="
+                + finish_reason + ")."
+            )
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
             try:
