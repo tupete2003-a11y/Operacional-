@@ -86,6 +86,13 @@ async function runFiveBotValidationOnce(){
   $('draftResult').textContent='A Groq respondeu ao teste de conexão, mas a execução integrada dos cinco agentes falhou: '+failed.message+'\nNenhuma publicação foi realizada.';
  }
 }
+function factCheckPanel(report){
+ if(!report||typeof report!=='object')return '';
+ const count=Number(report.claim_count||0);
+ if(!count&&report.status!=='REVIEW_REQUIRED')return '<div class="notice">Triagem automática: nenhum padrão de risco detectado. Isso não comprova a veracidade do conteúdo.</div>';
+ const items=(report.unverified_claims||[]).slice(0,6).map(x=>'<li><b>'+escapeApprovalText(x.bot_id||'Bot')+' · '+escapeApprovalText(x.category||'alegação')+'</b>: '+escapeApprovalText(x.claim_excerpt||'Fonte pendente')+'</li>').join('');
+ return '<div class="notice"><b>Revisão factual necessária · '+count+' alerta(s)</b><p>Não trate estas afirmações como fatos sem documentação. A triagem automática identifica padrões suspeitos; não consulta fontes externas nem comprova a veracidade.</p><ul>'+items+'</ul>'+(count>6?'<p>Mais '+(count-6)+' alertas registrados na tarefa.</p>':'')+'</div>';
+}
 async function loadTasks(){
  if(!apiKey){$('taskList').textContent='Conecte a API em Configurações para carregar as tarefas.';return}
  $('taskList').textContent='Carregando tarefas...';
@@ -100,7 +107,7 @@ async function loadTasks(){
    try{const tr=await fetch(apiUrl+'/tasks/'+encodeURIComponent(id),{headers:{'X-API-Key':apiKey}});const td=await tr.json();if(!tr.ok)throw Error(td.detail||'HTTP '+tr.status);
     const result=td.result||{}, outputs=result.outputs||{};
     const blocks=Object.entries(outputs).map(([bot,content])=>'<section class="approval-output"><b>'+escapeApprovalText(bot.replace('_',' '))+'</b><pre>'+escapeApprovalText(content)+'</pre></section>').join('');
-    target.innerHTML='<div class="approval-request"><b>Solicitação</b><p>'+escapeApprovalText(td.request||'')+'</p></div>'+(blocks||'<pre>'+escapeApprovalText(JSON.stringify(result,null,2))+'</pre>');
+    target.innerHTML=factCheckPanel(result.fact_check)+'<div class="approval-request"><b>Solicitação</b><p>'+escapeApprovalText(td.request||'')+'</p></div>'+(blocks||'<pre>'+escapeApprovalText(JSON.stringify(result,null,2))+'</pre>');
    }catch(e){target.textContent='Não foi possível carregar os detalhes: '+e.message}finally{b.disabled=false}
   });
  }catch(e){$('taskList').textContent='Não foi possível carregar tarefas: '+e.message}
@@ -124,7 +131,7 @@ async function loadApprovals(){
    const sections=Object.entries(outputs).map(([bot,content])=>'<section class="approval-output"><b>'+escapeApprovalText(bot.replace('_',' '))+'</b><pre>'+escapeApprovalText(content)+'</pre></section>').join('');
    const draft=result.draft?'<section class="approval-output"><b>' + escapeApprovalText(result.bot_name||result.bot_id||'Rascunho') + ' · '+escapeApprovalText(result.platform||'')+'</b><pre>'+escapeApprovalText(result.draft)+'</pre></section>':'';
    const fallback=(!sections&&!draft&&task)?'<pre>'+escapeApprovalText(JSON.stringify(result,null,2))+'</pre>':'';
-   const content=(sections||draft||fallback)||'<p class="hint">'+(taskError?'Não foi possível carregar os detalhes: '+escapeApprovalText(taskError):'O registro não contém conteúdo detalhado associado. Abra a tarefa para conferir o histórico.')+'</p>';
+   const content=factCheckPanel(result.fact_check)+((sections||draft||fallback)||'<p class="hint">'+(taskError?'Não foi possível carregar os detalhes: '+escapeApprovalText(taskError):'O registro não contém conteúdo detalhado associado. Abra a tarefa para conferir o histórico.')+'</p>');
    return '<article class="panel approval-card"><div class="approval-head"><div><b>'+escapeApprovalText(a.action||'Aprovação')+'</b><div class="hint">Status: '+escapeApprovalText(a.status||'PENDING')+' · Criado em: '+escapeApprovalText(a.created_at||'')+'</div></div><div class="actions">'+(a.status==='PENDING'?'<button data-approval="'+escapeApprovalText(a.id)+'" data-decision="APPROVE">Aprovar</button><button data-approval="'+escapeApprovalText(a.id)+'" data-decision="REJECT">Rejeitar</button>':'')+'</div></div><details class="approval-details" open><summary>Ver conteúdo completo da campanha</summary><div class="approval-request"><b>Objetivo solicitado</b><p>'+escapeApprovalText(task?.request||'Não informado')+'</p></div>'+content+'</details><div class="hint">Tarefa: '+escapeApprovalText(a.task_id||'não vinculada')+'</div></article>';
   }));
   $('approvalList').innerHTML=cards.join('');
