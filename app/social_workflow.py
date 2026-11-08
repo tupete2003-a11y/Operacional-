@@ -117,7 +117,8 @@ def generate_social_workflow(payload):
     if len(set(platforms)) != len(platforms) or len(set(content_types)) != len(content_types):
         raise ValueError("Não repita plataformas ou formatos na mesma solicitação.")
 
-    business = _business_profile()
+    test_mode = bool(payload.get("test_mode", False))
+    business = {} if test_mode else _business_profile()
     task_id = str(uuid.uuid4())
     created_at = store.now()
 
@@ -126,7 +127,7 @@ def generate_social_workflow(payload):
         "objetivo": payload["objective"],
         "plataformas": platforms,
         "formatos": {key: CONTENT_TYPES[key] for key in content_types},
-        "historico_recente": _recent_history(),
+        "historico_recente": [] if test_mode else _recent_history(),
         "regras": [
             "Escreva em português brasileiro.",
             "Não invente preços, descontos ou condições promocionais.",
@@ -186,10 +187,12 @@ def generate_social_workflow(payload):
             "selected_agents": [stage[0] for stage in stages],
             "platforms": platforms,
             "content_types": content_types,
-            "workflow": "FIVE_BOT_SOCIAL_CAMPAIGN",
+            "workflow": "FIVE_BOT_VALIDATION" if test_mode else "FIVE_BOT_SOCIAL_CAMPAIGN",
+            "test_mode": test_mode,
         },
         "result": {
             "business": business,
+            "test_mode": test_mode,
             "outputs": outputs,
             "stages": stage_history,
             "approval_required": False,
@@ -270,7 +273,7 @@ def generate_social_workflow(payload):
         store.create_approval(
             approval_id,
             task_id,
-            "Revisar campanha completa",
+            "Revisar teste técnico dos cinco bots" if test_mode else "Revisar campanha completa",
         )
         store.save_task(task)
     except Exception as exc:
@@ -291,6 +294,7 @@ def generate_social_workflow(payload):
         "approval_id": approval_id,
         "status": "DRAFT_REVIEW",
         "approval_required": True,
+        "test_mode": test_mode,
         "fact_check": task["result"]["fact_check"],
         "publishing_enabled": False,
         "business": business,
