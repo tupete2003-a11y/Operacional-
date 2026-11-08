@@ -26,10 +26,11 @@ def _fact_check_outputs(outputs):
     findings = []
     patterns = [
         ("percentual_ou_estatistica", re.compile(r"\b\d+(?:[.,]\d+)?\s*%", re.IGNORECASE)),
-        ("economia_ou_desempenho", re.compile(r"\b(?:economiza(?:r|ndo|rá|ria)?\s+(?:até\s+)?\d|reduz(?:ir|indo|irá)?\s+(?:o\s+)?consumo|consome\s+\d|economia\s+comprovada|redução\s+de\s+consumo)\b", re.IGNORECASE)),
-        ("recurso_tecnico", re.compile(r"\b(?:controle\s+(?:total\s+)?(?:via|pelo)\s+app|controle\s+por\s+aplicativo|fala\s+com\s+seu\s+celular|conecta(?:do)?\s+(?:ao|com)\s+(?:seu\s+)?celular|wi-?fi|bluetooth|alerta(?:s)?\s+(?:pelo|no)\s+celular|inverter)\b", re.IGNORECASE)),
+        ("economia_ou_desempenho", re.compile(r"\b(?:economiza(?:r|ndo|rá|ria)?\s+(?:até\s+)?\d|reduz(?:ir|indo|irá)?\s+(?:o\s+)?consumo|consome\s+\d|economia\s+comprovada|redução\s+de\s+consumo|mais\s+econ[oô]mico|alta\s+efici[eê]ncia|efici[eê]ncia\s+energ[eé]tica\s+(?:superior|maior|comprovada))\b", re.IGNORECASE)),
+        ("recurso_tecnico", re.compile(r"\b(?:controle\s+(?:total\s+)?(?:via|pelo)\s+app|controle\s+por\s+aplicativo|(?:fala|conversa)\s+com\s+(?:voc[eê]|seu\s+celular)|(?:veja|acesse|controle)\s+(?:o\s+)?app\s+(?:na\s+pr[aá]tica|do\s+produto)|aplicativo\s+(?:pr[oó]prio|integrado)|conecta(?:do)?\s+(?:ao|com)\s+(?:seu\s+)?celular|wi-?fi|bluetooth|alerta(?:s)?\s+(?:pelo|no)\s+celular|inverter|controle\s+remoto|sensor(?:es)?\s+(?:inteligente|de)|display\s+(?:digital|touch)|comando\s+de\s+voz)\b", re.IGNORECASE)),
+        ("recurso_ou_beneficio_nao_comprovado", re.compile(r"\b(?:refrigerador(?:es)?\s+inteligente|tecnologia\s+(?:de\s+)?(?:ponta|avançada|inovadora)|temperatura\s+(?:perfeita|ideal\s+garantida)|zero\s+desperd[ií]cio|cabe\s+em\s+qualquer\s+cozinha|design\s+(?:ultra)?compacto|garante\s+(?:mais\s+)?(?:frescor|conservaç[aã]o|economia)|mant[eé]m\s+(?:os\s+alimentos|a\s+temperatura)\s+(?:sempre|por\s+mais\s+tempo))\b", re.IGNORECASE)),
         ("garantia_ou_certificacao", re.compile(r"\b(?:garantia\s+de\s+\d|certificad[oa]\s+(?:pelo|por)|aprovad[oa]\s+pelo|homologad[oa]|selo\s+procel|inmetro)\b", re.IGNORECASE)),
-        ("depoimento_ou_resultado", re.compile(r"\b(?:depoimento\s+(?:real|de\s+cliente)|cliente\s+afirma|resultado\s+comprovado|aumentou\s+as\s+vendas|economia\s+comprovada)\b", re.IGNORECASE)),
+        ("depoimento_ou_resultado", re.compile(r"\b(?:depoimento\s+(?:real|de\s+cliente)|cliente\s+afirma|resultado\s+comprovado|aumentou\s+as\s+vendas|economia\s+comprovada|clientes?\s+(?:reais?\s+)?(?:dizem|relatam|comprovam))\b", re.IGNORECASE)),
     ]
     for bot_id, output in outputs.items():
         raw = output if isinstance(output, str) else ""
@@ -42,8 +43,8 @@ def _fact_check_outputs(outputs):
         for category, pattern in patterns:
             for match in pattern.finditer(clean):
                 excerpt = clean[max(0, match.start() - 90):min(len(clean), match.end() + 120)]
-                if re.search(r"(?:não\s+(?:afirme|prometa|invent)|sem\s+(?:promessas?|depoimentos?)|(?:evite|remova|não\s+usar)\s+(?:a\s+)?(?:alegação|afirmação|depoimento))", excerpt, re.IGNORECASE):
-                    continue
+                # Não suprimir ocorrências por contexto: até uma frase citada como exemplo
+                # deve ser revisada por uma pessoa antes de liberar a publicação.
                 findings.append({"bot_id": bot_id, "category": category, "claim_excerpt": excerpt[:240], "status": "UNVERIFIED_SOURCE_REQUIRED"})
                 if len(findings) >= 40: break
             if len(findings) >= 40: break
