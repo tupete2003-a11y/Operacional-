@@ -33,11 +33,22 @@ async def require_api_key(request: Request, call_next):
 
 @app.get("/auth/check")
 async def auth_check(request: Request):
-    """Diagnóstico seguro: informa apenas se a variável existe e se a chave recebida confere."""
-    expected = os.getenv("API_ACCESS_TOKEN", "").strip()
-    supplied = request.headers.get("X-API-Key", "").strip()
+    """Diagnóstico seguro: nunca revela a chave; informa somente presença e comprimentos."""
+    raw_expected = os.getenv("API_ACCESS_TOKEN", "")
+    raw_supplied = request.headers.get("X-API-Key", "")
+    expected = raw_expected.strip()
+    supplied = raw_supplied.strip()
     valid = bool(expected and supplied and secrets.compare_digest(supplied.encode("utf-8"), expected.encode("utf-8")))
-    return {"configured": bool(expected), "valid": valid}
+    return {
+        "configured": bool(expected),
+        "valid": valid,
+        "header_received": bool(raw_supplied),
+        "expected_length": len(expected),
+        "received_length": len(supplied),
+        "same_length": len(expected) == len(supplied),
+        "environment_has_outer_whitespace": raw_expected != raw_expected.strip(),
+        "header_has_outer_whitespace": raw_supplied != raw_supplied.strip(),
+    }
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=2, max_length=10000)
