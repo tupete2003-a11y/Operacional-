@@ -15,6 +15,7 @@ from .config import get_groq_api_key, get_groq_env_names
 from .social import dashboard as social_dashboard, BOTS, PLATFORMS
 from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
+from . import supervisor
 
 logger = logging.getLogger("automa_x.ai")
 
@@ -78,6 +79,7 @@ def startup():
     if not os.getenv("API_ACCESS_TOKEN"):
         raise RuntimeError("API_ACCESS_TOKEN precisa estar configurado")
     store.init_db()
+    supervisor.start_background_supervisor()
 
 @app.get("/")
 def root():
@@ -211,6 +213,22 @@ def system_status():
             "human_approval_required": True,
         },
     }
+
+
+@app.get("/supervisor/status")
+def supervisor_status():
+    """Estado e histórico do supervisor autônomo; rota protegida por API key."""
+    return supervisor.get_status()
+
+
+@app.post("/supervisor/run")
+def supervisor_run():
+    """Executa imediatamente uma auditoria não destrutiva e registra o resultado."""
+    try:
+        return supervisor.run_audit()
+    except Exception as exc:
+        logger.exception("Falha ao executar auditoria do supervisor")
+        raise HTTPException(status_code=500, detail="Falha na auditoria do supervisor: " + type(exc).__name__)
 
 
 @app.get("/social/dashboard")
