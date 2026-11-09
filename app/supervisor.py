@@ -2,6 +2,7 @@
 
 This service performs non-destructive health checks on a schedule. It never
 changes secrets, deploys code, publishes externally, spends money, or deletes data.
+Code edits and deployments require the separate, authorized repository executor.
 """
 import json
 import logging
