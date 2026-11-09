@@ -182,6 +182,61 @@ jobs:
           fi
           python tests/live_production_smoke.py
 
+  live-persistence-readback:
+    if: github.event_name == 'push' && contains(github.event.head_commit.message, '[AUTOMA_X_PERSISTENCE_READBACK]')
+    name: Verify task and approval survive API redeploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Retrieve API access token from Render without exposing it
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RENDER_API_KEY" ]; then
+            echo "::error::Render API credential is unavailable."
+            exit 1
+          fi
+          RESPONSE=$(curl --fail --silent --show-error --max-time 20 \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/env-vars/API_ACCESS_TOKEN")
+          TOKEN=$(printf '%s' "$RESPONSE" | python -c 'import json,sys; d=json.load(sys.stdin); e=d.get("envVar",d); v=e.get("value","") if isinstance(e,dict) else ""; print(v)')
+          if [ -z "$TOKEN" ]; then
+            echo "::error::API_ACCESS_TOKEN was not returned by Render."
+            exit 1
+          fi
+          printf '::add-mask::%s\n' "$TOKEN"
+          echo "API_ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "Service authentication token retrieved securely."
+      - name: Wait for this commit to become the latest live Render deployment
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 30); do
+            RESPONSE=$(curl --fail --silent --show-error --max-time 20 -H "Authorization: Bearer $RENDER_API_KEY" "https://api.render.com/v1/services/srv-dbjo890473hc73aetda0/deploys?limit=5")
+            MATCH=$(printf '%s' "$RESPONSE" | GITHUB_SHA="$GITHUB_SHA" python -c 'import json,os,sys; data=json.load(sys.stdin); items=[x.get("deploy",x) for x in data] if isinstance(data,list) else []; d=next((x for x in items if x.get("commit",{}).get("id")==os.environ["GITHUB_SHA"]),{}); print(d.get("status",""))')
+            echo "Render deployment for this commit: ${MATCH:-not found} (attempt $attempt/30)"
+            if [ "$MATCH" = "live" ]; then exit 0; fi
+            if [ "$MATCH" = "build_failed" ] || [ "$MATCH" = "update_failed" ] || [ "$MATCH" = "canceled" ]; then
+              echo "::error::Render deployment failed with status $MATCH."
+              exit 1
+            fi
+            sleep 20
+          done
+          echo "::error::Timed out waiting for this commit to become live."
+          exit 1
+      - name: Verify PostgreSQL data survived redeploy
+        env:
+          AUTOMA_X_API_URL: https://automa-x-api.onrender.com
+        run: python tests/live_persistence_readback.py
+
   alert-on-failure:
     name: Alert on monitor failure
     if: failure()
