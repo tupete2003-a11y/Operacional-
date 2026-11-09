@@ -12,7 +12,7 @@ import urllib.request
 
 BASE_URL = os.getenv("AUTOMA_X_API_URL", "https://automa-x-api.onrender.com").rstrip("/")
 TOKEN = os.getenv("API_ACCESS_TOKEN", "")
-EXPECTED_BOTS = ["BOT_05", "BOT_02", "BOT_03", "BOT_04", "BOT_01"]
+EXPECTED_BOTS = ["BOT_02", "BOT_03", "BOT_01", "BOT_04", "BOT_05"]
 
 
 def request(path, method="GET", payload=None, attempts=3):
