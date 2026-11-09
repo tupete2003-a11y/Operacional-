@@ -28,7 +28,8 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Render already auto-deploys commits; keep the hook only for manual fallback runs.
+    if: github.event_name == 'workflow_dispatch'
     steps:
       - name: Trigger Render deploy hook when configured
         env:
