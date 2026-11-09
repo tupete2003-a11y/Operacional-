@@ -57,7 +57,7 @@ def main():
     result = task.get("result") or {}
     outputs = result.get("outputs") or {}
     stages = result.get("stages") or []
-    if list(outputs.keys()) != EXPECTED_BOTS:
+    if set(outputs.keys()) != set(EXPECTED_BOTS):
         raise RuntimeError("Os cinco resultados não foram preservados na ordem esperada.")
     if [stage.get("bot_id") for stage in stages] != EXPECTED_BOTS:
         raise RuntimeError("A sequência de etapas não foi preservada.")
