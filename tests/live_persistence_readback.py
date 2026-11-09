@@ -53,7 +53,10 @@ def main():
     ]
     if not matches:
         raise RuntimeError("A tarefa de teste anterior não foi encontrada após a reinicialização.")
-    task = matches[0]
+    task_summary = matches[0]
+    task = request("/tasks/" + task_summary["id"])
+    if task.get("id") != task_summary.get("id"):
+        raise RuntimeError("A leitura detalhada da tarefa não corresponde ao registro listado.")
     result = task.get("result") or {}
     outputs = result.get("outputs") or {}
     stages = result.get("stages") or []
