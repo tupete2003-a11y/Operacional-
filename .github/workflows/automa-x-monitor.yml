@@ -55,6 +55,33 @@ jobs:
             exit 1
           fi
 
+      - name: Check application readiness and persistent database
+        run: |
+          set -euo pipefail
+          READY_JSON=$(curl --silent --show-error --fail --connect-timeout 15 --max-time 30 https://automa-x-api.onrender.com/health/ready)
+          printf '%s' "$READY_JSON" | python -c '
+          import json, sys
+          data = json.load(sys.stdin)
+          db = data.get("database", {})
+          bots = data.get("bots", {})
+          publishing = data.get("publishing", {})
+          problems = []
+          if data.get("status") != "ready":
+              problems.append("API readiness is not ready")
+          if db.get("backend") != "postgresql" or db.get("connected") is not True:
+              problems.append("PostgreSQL is not confirmed connected")
+          if bots.get("registered") != 5:
+              problems.append("Expected exactly five registered bots")
+          if publishing.get("enabled") is not False:
+              problems.append("External publishing must remain disabled")
+          if problems:
+              print("::error::" + "; ".join(problems))
+              raise SystemExit(1)
+          print("Readiness OK: PostgreSQL connected, five bots registered, external publishing disabled.")
+          if not data.get("ai", {}).get("configured"):
+              print("::warning::Groq credential is not detected; live AI response still requires a separate test.")
+          '
+
   render-deploy-status:
     name: Render latest deployment status
     runs-on: ubuntu-latest
