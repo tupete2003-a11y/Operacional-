@@ -77,15 +77,29 @@ def get_connection_diagnostics() -> Dict:
         complete = present == len(all_keys)
         app_ready = groups["app"]["configured"] == groups["app"]["required"]
         account_ready = groups["account"]["configured"] == groups["account"]["required"]
+        oauth_record = None
+        if name == "TikTok":
+            try:
+                from . import store
+                oauth_record = store.get_social_connection_status("TikTok")
+            except Exception:
+                oauth_record = None
+        oauth_connected = bool(oauth_record)
+        status = "CONNECTED_OAUTH" if oauth_connected else (
+            "CONFIGURED_PENDING_VALIDATION" if complete else (
+                "APP_CONFIGURED_ACCOUNT_PENDING" if app_ready else "NOT_CONFIGURED"
+            )
+        )
         platforms.append({
             "name": name,
             "adapter": config["adapter"],
-            "status": "CONNECTED_OAUTH" if oauth_connected else ("CONFIGURED_PENDING_VALIDATION" if complete else ("APP_CONFIGURED_ACCOUNT_PENDING" if app_ready else "NOT_CONFIGURED"),
+            "status": status,
             "credentials_present": present,
             "credentials_required": len(all_keys),
             "app_configured": app_ready,
-            "account_credentials_present": account_ready,
-            "oauth_verified": False,
+            "account_credentials_present": oauth_connected or account_ready,
+            "oauth_verified": oauth_connected,
+            "oauth_scopes": [x for x in (oauth_record.get("scopes", "") if oauth_record else "").split(",") if x],
             "publishing_enabled": False,
             "missing_environment_variables": [key for key in all_keys if not os.getenv(key, "").strip()],
             "next_steps": config["required_next"],
