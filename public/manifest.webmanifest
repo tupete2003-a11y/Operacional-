@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "AUTOMA X — Central de Comando",
+  "short_name": "AUTOMA X",
+  "description": "Central de comando dos cinco agentes AUTOMA X.",
+  "lang": "pt-BR",
+  "start_url": "/?source=iphone-home-screen",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#080d19",
+  "theme_color": "#080d19",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
