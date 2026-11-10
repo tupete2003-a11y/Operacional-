@@ -16,6 +16,7 @@ from .social import dashboard as social_dashboard, BOTS, PLATFORMS
 from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
 from . import supervisor
+from .connections import get_connection_diagnostics
 
 logger = logging.getLogger("automa_x.ai")
 
@@ -241,6 +242,12 @@ def supervisor_run():
     except Exception as exc:
         logger.exception("Falha ao executar auditoria do supervisor")
         raise HTTPException(status_code=500, detail="Falha na auditoria do supervisor: " + type(exc).__name__)
+
+
+@app.get("/connections/diagnostics")
+def connections_diagnostics():
+    """Diagnóstico autenticado e somente leitura das integrações sociais."""
+    return get_connection_diagnostics()
 
 
 @app.get("/social/dashboard")
