@@ -62,8 +62,7 @@ def _configured_names(names: List[str]) -> List[str]:
 
 def get_connection_diagnostics() -> Dict:
     """Return presence-only metadata; never return secret values or token fragments."""
-    platforms = []
-    for name, config in PLATFORM_CONFIG.items():
+    from . import store\n    storage_backend = store.backend()\n    token_storage_durable = storage_backend == "postgresql"\n    platforms = []\n    for name, config in PLATFORM_CONFIG.items():
         groups = {
             group: {
                 "required": len(keys),
