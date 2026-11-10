@@ -4,8 +4,8 @@ import secrets
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from . import store
@@ -15,7 +15,7 @@ from .config import get_groq_api_key, get_groq_env_names
 from .social import dashboard as social_dashboard, BOTS, PLATFORMS
 from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
-from . import supervisor
+from . import supervisor, tiktok_oauth
 from .connections import get_connection_diagnostics
 
 logger = logging.getLogger("automa_x.ai")
@@ -25,7 +25,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
-    if request.method == "OPTIONS" or request.url.path in {"/", "/health", "/health/ready", "/auth/check", "/tiktokF8RVDxj046UhqnrqC3RlbWjlDfEp6W4v.txt", "/tiktokjXdgJiHuOjywesokdDGiV2OhABLo9Ggw.txt"}:
+    if request.method == "OPTIONS" or request.url.path in {"/", "/health", "/health/ready", "/auth/check", "/tiktokF8RVDxj046UhqnrqC3RlbWjlDfEp6W4v.txt", "/tiktokjXdgJiHuOjywesokdDGiV2OhABLo9Ggw.txt", "/oauth/tiktok/callback"}:
         return await call_next(request)
     expected = os.getenv("API_ACCESS_TOKEN", "").strip()
     supplied = request.headers.get("X-API-Key", "").strip()
@@ -243,6 +243,50 @@ def supervisor_run():
         logger.exception("Falha ao executar auditoria do supervisor")
         raise HTTPException(status_code=500, detail="Falha na auditoria do supervisor: " + type(exc).__name__)
 
+
+
+@app.post("/oauth/tiktok/start")
+def tiktok_oauth_start(response: Response):
+    """Inicia OAuth com state anti-CSRF; exige a chave da API no painel."""
+    try:
+        authorization_url, state = tiktok_oauth.begin_authorization()
+    except tiktok_oauth.TikTokOAuthError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    response.set_cookie(
+        key="automa_tiktok_oauth_state",
+        value=state,
+        max_age=600,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        path="/oauth/tiktok",
+    )
+    return {"authorization_url": authorization_url, "expires_in": 600}
+
+
+@app.get("/oauth/tiktok/callback", response_class=HTMLResponse)
+def tiktok_oauth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Callback público do TikTok; state em cookie protege contra CSRF."""
+    cookie_state = request.cookies.get("automa_tiktok_oauth_state", "")
+    try:
+        if error:
+            raise tiktok_oauth.TikTokOAuthError("A autorização foi recusada ou cancelada no TikTok.")
+        result = tiktok_oauth.complete_authorization(code, state, cookie_state)
+        body = "<h2>Conta TikTok conectada</h2><p>OAuth concluído e tokens armazenados criptografados.</p><p>Publicação externa permanece desativada.</p>"
+        response = HTMLResponse(body, status_code=200)
+    except tiktok_oauth.TikTokOAuthError as exc:
+        body = "<h2>Não foi possível conectar o TikTok</h2><p>" + str(exc) + "</p><p>Volte ao painel e tente novamente.</p>"
+        response = HTMLResponse(body, status_code=400)
+    except Exception:
+        logger.exception("Falha inesperada no callback OAuth TikTok")
+        response = HTMLResponse("<h2>Falha na conexão</h2><p>Ocorreu um erro interno. Nenhum segredo foi exibido.</p>", status_code=500)
+    response.delete_cookie("automa_tiktok_oauth_state", path="/oauth/tiktok")
+    return response
+
+
+@app.get("/oauth/tiktok/status")
+def tiktok_oauth_status():
+    return tiktok_oauth.connection_status()
 
 @app.get("/connections/diagnostics")
 def connections_diagnostics():
