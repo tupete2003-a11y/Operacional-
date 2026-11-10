@@ -114,5 +114,6 @@ def get_connection_diagnostics() -> Dict:
         "platforms": platforms,
         "secrets_exposed": False,
         "external_publishing_enabled": False,
+        "token_storage": {"backend": storage_backend, "durable": token_storage_durable, "oauth_available": token_storage_durable},
         "note": "Variáveis presentes não comprovam OAuth, escopos, auditoria da plataforma nem publicação. Nenhum teste publica conteúdo.",
     }
