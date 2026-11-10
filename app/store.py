@@ -47,6 +47,10 @@ def init_db():
             "CREATE TABLE IF NOT EXISTS schedules (id TEXT PRIMARY KEY, scheduled_at TEXT NOT NULL, platform TEXT NOT NULL, format TEXT NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL, created_at TEXT NOT NULL)",
             "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)",
         ]
+    statements.extend([
+        "CREATE TABLE IF NOT EXISTS oauth_states (state_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS social_connections (platform TEXT PRIMARY KEY, access_token_encrypted TEXT NOT NULL, refresh_token_encrypted TEXT NOT NULL, open_id TEXT, scopes TEXT NOT NULL, expires_at TEXT, updated_at TEXT NOT NULL)",
+    ])
     with connect() as conn:
         for statement in statements:
             conn.execute(statement)
@@ -153,3 +157,40 @@ def list_agent_execution_history(limit=100):
             item["result"] = {}
         items.append(item)
     return items
+
+
+def save_oauth_state(state_hash, expires_at):
+    with connect() as conn:
+        _execute(conn, "DELETE FROM oauth_states WHERE expires_at < ?", (now(),))
+        _execute(conn, "INSERT INTO oauth_states(state_hash, expires_at) VALUES (?, ?)", (state_hash, expires_at))
+
+
+def consume_oauth_state(state_hash):
+    with connect() as conn:
+        row = _execute(conn, "SELECT expires_at FROM oauth_states WHERE state_hash=?", (state_hash,)).fetchone()
+        if not row:
+            return False
+        _execute(conn, "DELETE FROM oauth_states WHERE state_hash=?", (state_hash,))
+        return str(row["expires_at"]) >= now()
+
+
+def save_social_connection(platform, access_token_encrypted, refresh_token_encrypted, open_id, scopes, expires_at):
+    sql = """INSERT INTO social_connections(platform, access_token_encrypted, refresh_token_encrypted, open_id, scopes, expires_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(platform) DO UPDATE SET access_token_encrypted=excluded.access_token_encrypted,
+             refresh_token_encrypted=excluded.refresh_token_encrypted, open_id=excluded.open_id,
+             scopes=excluded.scopes, expires_at=excluded.expires_at, updated_at=excluded.updated_at"""
+    with connect() as conn:
+        _execute(conn, sql, (platform, access_token_encrypted, refresh_token_encrypted, open_id, scopes, expires_at, now()))
+
+
+def get_social_connection(platform):
+    with connect() as conn:
+        row = _execute(conn, "SELECT * FROM social_connections WHERE platform=?", (platform,)).fetchone()
+    return dict(row) if row else None
+
+
+def get_social_connection_status(platform):
+    with connect() as conn:
+        row = _execute(conn, "SELECT open_id, scopes, expires_at, updated_at FROM social_connections WHERE platform=?", (platform,)).fetchone()
+    return dict(row) if row else None
