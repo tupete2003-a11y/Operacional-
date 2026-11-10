@@ -175,4 +175,14 @@ if(apiKey){
   $('connectionMsg').textContent='A conexão pública e o estado do sistema são exibidos automaticamente. A chave protegida é necessária apenas para operações privadas.';
   loadSchedules();
 }
-\n// Registra o modo instalável do AUTOMA X. O cache contém apenas a estrutura pública do app.\nif ("serviceWorker" in navigator && location.protocol === "https:") {\n  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));\n}\nconst installHelp = document.getElementById("iphoneInstallHelp");\nif (installHelp) installHelp.addEventListener("click", () => {\n  const message = "No Safari: toque em Compartilhar (quadrado com seta para cima) → Adicionar à Tela de Início → Adicionar. Depois abra pelo ícone AUTOMA X.";\n  const target = document.getElementById("iphoneInstallStatus");\n  if (target) target.textContent = message;\n});\n</script></body></html>
+
+// Registra o modo instalável do AUTOMA X. O cache contém apenas a estrutura pública do app.
+if ("serviceWorker" in navigator && location.protocol === "https:") {
+  window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js").catch(() => {}));
+}
+const installHelp = document.getElementById("iphoneInstallHelp");
+if (installHelp) installHelp.addEventListener("click", () => {
+  const message = "No Safari: toque em Compartilhar (quadrado com seta para cima) → Adicionar à Tela de Início → Adicionar. Depois abra pelo ícone AUTOMA X.";
+  const target = document.getElementById("iphoneInstallStatus");
+  if (target) target.textContent = message;
+});\n</script></body></html>
