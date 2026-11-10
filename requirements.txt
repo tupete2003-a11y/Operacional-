@@ -3,3 +3,4 @@ uvicorn[standard]>=0.27,<1.0
 pydantic>=2.6,<3.0
 
 psycopg[binary]>=3.2,<4.0
+cryptography>=42,<47\n
