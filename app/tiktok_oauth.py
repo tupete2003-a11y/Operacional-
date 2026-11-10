@@ -40,6 +40,8 @@ def _settings():
 
 
 def begin_authorization():
+    if store.backend() != "postgresql":
+        raise TikTokOAuthError("Para preservar os tokens após reinicializações, o AUTOMA X precisa de um banco PostgreSQL durável. A conexão OAuth ficará bloqueada até esse banco estar configurado.")
     client_key, _, redirect_uri, _ = _settings()
     state = secrets.token_urlsafe(32)
     state_hash = hashlib.sha256(state.encode("utf-8")).hexdigest()
