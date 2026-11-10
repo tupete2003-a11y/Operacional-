@@ -24,7 +24,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
 
 @app.middleware("http")
 async def require_api_key(request: Request, call_next):
-    if request.method == "OPTIONS" or request.url.path in {"/", "/health", "/health/ready", "/auth/check"}:
+    if request.method == "OPTIONS" or request.url.path in {"/", "/health", "/health/ready", "/auth/check", "/tiktokF8RVDxj046UhqnrqC3RlbWjlDfEp6W4v.txt"}:
         return await call_next(request)
     expected = os.getenv("API_ACCESS_TOKEN", "").strip()
     supplied = request.headers.get("X-API-Key", "").strip()
@@ -84,6 +84,12 @@ def startup():
 @app.get("/")
 def root():
     return FileResponse(Path(__file__).resolve().parent.parent / "public" / "index.html", media_type="text/html")
+
+@app.get("/tiktokF8RVDxj046UhqnrqC3RlbWjlDfEp6W4v.txt", include_in_schema=False)
+def tiktok_domain_verification():
+    verification_file = Path(__file__).resolve().parent.parent / "public" / "tiktokF8RVDxj046UhqnrqC3RlbWjlDfEp6W4v.txt"
+    return FileResponse(verification_file, media_type="text/plain")
+
 
 @app.get("/health")
 def health():
