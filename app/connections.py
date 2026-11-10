@@ -7,7 +7,7 @@ PLATFORM_CONFIG = {
         "adapter": "tiktok_content_posting",
         "credential_groups": {
             "app": ["TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET", "TIKTOK_REDIRECT_URI"],
-            "account": ["TIKTOK_ACCESS_TOKEN", "TIKTOK_REFRESH_TOKEN"],
+            "account": [],
         },
         "required_next": [
             "Criar o app no TikTok for Developers",
@@ -80,7 +80,7 @@ def get_connection_diagnostics() -> Dict:
         platforms.append({
             "name": name,
             "adapter": config["adapter"],
-            "status": "CONFIGURED_PENDING_VALIDATION" if complete else ("APP_CONFIGURED_ACCOUNT_PENDING" if app_ready else "NOT_CONFIGURED"),
+            "status": "CONNECTED_OAUTH" if oauth_connected else ("CONFIGURED_PENDING_VALIDATION" if complete else ("APP_CONFIGURED_ACCOUNT_PENDING" if app_ready else "NOT_CONFIGURED"),
             "credentials_present": present,
             "credentials_required": len(all_keys),
             "app_configured": app_ready,
