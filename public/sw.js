@@ -1,5 +1,5 @@
 const CACHE_NAME = "automa-x-shell-v1";
-const SHELL = ["/", "/manifest.webmanifest", "/icon.svg"];
+const SHELL = ["/", "/manifest.webmanifest", "/icon.svg", "/iphone-install.html"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)));
