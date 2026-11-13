@@ -126,9 +126,9 @@ def build_photo_prompt(run: dict[str, Any]) -> str:
     visual = (results.get("bot_02") or {}).get("content", "")
     return (
         "Objetivo original do operador: " + str(run.get("objective", "")) +
-        "\\n\\nBriefing do BOT_01 — Scene Planner:\\n" + str(scene)[:3000] +
-        "\\n\\nDireção visual do BOT_02 — Visual Research:\\n" + str(visual)[:3000] +
-        "\\n\\nSiga as decisões dos dois especialistas sem alterar a identidade visual da modelo."
+        "\n\nBriefing do BOT_01 — Scene Planner:\n" + str(scene)[:3000] +
+        "\n\nDireção visual do BOT_02 — Visual Research:\n" + str(visual)[:3000] +
+        "\n\nSiga as decisões dos dois especialistas sem alterar a identidade visual da modelo."
     )
 
 
