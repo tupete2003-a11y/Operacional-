@@ -9,11 +9,8 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from . import store
-from .agents import list_agents
 from .orchestrator import submit_request
 from .config import get_groq_api_key, get_groq_env_names
-from .social import dashboard as social_dashboard, BOTS, PLATFORMS
-from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
 from . import supervisor, tiktok_oauth
 from .connections import get_connection_diagnostics
@@ -71,7 +68,7 @@ class SocialDraftRequest(BaseModel):
 class SocialWorkflowRequest(BaseModel):
     test_mode: bool = False
     objective: str = Field(min_length=5, max_length=4000)
-    platforms: list[str] = Field(default_factory=lambda: list(PLATFORMS), min_length=1, max_length=5)
+    platforms: list[str] = Field(default_factory=lambda: list(model_studio.PLATFORMS), min_length=1, max_length=5)
     content_types: list[str] = Field(default_factory=lambda: list(CONTENT_TYPES), min_length=1, max_length=5)
 
 class ApprovalRequest(BaseModel):
@@ -128,7 +125,7 @@ def readiness():
         },
         "ai": {"provider": "Groq", "configured": bool(get_groq_api_key())},
         "bots": {"registered": len(model_studio.MODEL_STUDIO_BOTS)},
-        "social": {"platforms_registered": len(PLATFORMS), "connected": 0},
+        "social": {"platforms_registered": len(model_studio.PLATFORMS), "connected": 0},
         "publishing": {"enabled": False},
     }
 
@@ -198,7 +195,7 @@ def schedules():
 
 @app.post("/schedules")
 def create_schedule(payload: ScheduleRequest):
-    if payload.platform not in PLATFORMS:
+    if payload.platform not in model_studio.PLATFORMS:
         raise HTTPException(status_code=422, detail="Plataforma não suportada.")
     if payload.scheduled_at.tzinfo is None:
         raise HTTPException(status_code=422, detail="Informe data e horário com fuso horário.")
@@ -246,14 +243,14 @@ def system_status():
             "note": "configured indica apenas presença da chave; verified exige chamada real ao provedor.",
         },
         "bots": {
-            "registered": len(BOTS),
+            "registered": len(model_studio.MODEL_STUDIO_BOTS),
             "ids": [bot["id"] for bot in model_studio.MODEL_STUDIO_BOTS],
             "execution_verified": False,
             "note": "Cadastro não equivale a execução validada de ponta a ponta.",
         },
         "social_platforms": [
             {"name": name, "connected": False, "publishing_enabled": False}
-            for name in PLATFORMS
+            for name in model_studio.PLATFORMS
         ],
         "safety": {
             "external_publishing_enabled": False,
