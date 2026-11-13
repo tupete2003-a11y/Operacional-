@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from app import model_studio, model_studio_media, store
 from PIL import Image
@@ -55,6 +56,22 @@ class ModelStudioTests(unittest.TestCase):
         self.assertIn("encrypted_data", columns)
         self.assertIn("review_status", columns)
         self.assertIn("review_note", columns)
+
+    @patch("app.llm.ask_agent")
+    def test_chat_uses_master_operational_and_recent_context(self, mocked_ask):
+        mocked_ask.return_value = "Vamos organizar a próxima produção."
+        history = [{"role": "user", "content": "Quero fotos naturais."}]
+        reply = model_studio.chat_with_master("Planeje a próxima cena.", history)
+        self.assertEqual(reply, "Vamos organizar a próxima produção.")
+        agent, prompt = mocked_ask.call_args.args
+        self.assertEqual(agent["id"], "BOT_05")
+        self.assertEqual(agent["name"], "Master Operational")
+        self.assertIn("Quero fotos naturais.", prompt)
+        self.assertIn("Planeje a próxima cena.", prompt)
+
+    def test_chat_rejects_empty_message(self):
+        with self.assertRaises(ValueError):
+            model_studio.chat_with_master(" ")
 
     def test_unknown_platform_is_rejected(self):
         with self.assertRaises(ValueError):
