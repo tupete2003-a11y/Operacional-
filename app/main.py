@@ -4,7 +4,7 @@ import secrets
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ from .config import get_groq_api_key, get_groq_env_names
 from .llm import ask_agent
 from . import supervisor, tiktok_oauth
 from .connections import get_connection_diagnostics
-from . import model_studio
+from . import model_studio, model_studio_media
 
 logger = logging.getLogger("automa_x.ai")
 
@@ -57,6 +57,11 @@ class ModelStudioPlanRequest(BaseModel):
     objective: str = Field(min_length=5, max_length=4000)
     reference_id: str = Field(min_length=1, max_length=200)
     platform: str = Field(default="Instagram", max_length=40)
+    composition: str = Field(default="group", max_length=40)
+    style: str = Field(default="photorealistic", max_length=60)
+
+class ModelStudioGenerateRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=2000)
     composition: str = Field(default="group", max_length=40)
     style: str = Field(default="photorealistic", max_length=60)
 
@@ -140,6 +145,51 @@ def model_studio_status():
 @app.get("/model-studio/agents")
 def model_studio_agents():
     return {"total": len(model_studio.MODEL_STUDIO_BOTS), "agents": model_studio.MODEL_STUDIO_BOTS}
+
+@app.get("/model-studio/reference")
+def model_studio_reference_status():
+    return model_studio_media.reference_status()
+
+@app.post("/model-studio/reference")
+async def model_studio_upload_reference(file: UploadFile = File(...)):
+    try:
+        raw = await file.read(model_studio_media.MAX_IMAGE_BYTES + 1)
+        result = model_studio_media.save_reference(raw)
+        return {"status": "stored", **result}
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        await file.close()
+
+@app.post("/model-studio/generate")
+def model_studio_generate(payload: ModelStudioGenerateRequest):
+    try:
+        reference = model_studio_media.get_reference()
+        if not reference:
+            raise HTTPException(status_code=409, detail="Envie primeiro a foto de referência da modelo.")
+        reference_record, reference_bytes = reference
+        image_bytes, model_name = model_studio_media.generate_from_reference(
+            reference_bytes, payload.objective, payload.composition, payload.style
+        )
+        result = model_studio_media.save_generated(
+            image_bytes, reference_record["id"], payload.objective, model_name
+        )
+        return {"status": result["quality"]["status"], "reference_id": reference_record["id"], **result,
+                "image_url": "/model-studio/images/" + result["image_id"],
+                "identity_review": "A confirmação de que é a mesma modelo exige revisão visual humana."}
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+@app.get("/model-studio/images/{image_id}")
+def model_studio_get_image(image_id: str):
+    try:
+        loaded = model_studio_media.load_generated(image_id)
+        if not loaded:
+            raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+        record, raw = loaded
+        return Response(content=raw, media_type=record["mime_type"], headers={"Cache-Control": "private, no-store"})
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
 
 @app.post("/model-studio/plan")
 def model_studio_plan(payload: ModelStudioPlanRequest):
