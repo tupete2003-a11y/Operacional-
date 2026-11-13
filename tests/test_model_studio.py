@@ -1,0 +1,44 @@
+import unittest
+
+from app import model_studio
+
+
+class ModelStudioTests(unittest.TestCase):
+    def test_five_specialized_bots_are_registered(self):
+        self.assertEqual(len(model_studio.MODEL_STUDIO_BOTS), 5)
+        self.assertEqual(
+            [bot["id"] for bot in model_studio.MODEL_STUDIO_BOTS],
+            ["BOT_01", "BOT_02", "BOT_03", "BOT_04", "BOT_05"],
+        )
+
+    def test_dashboard_keeps_generation_and_publishing_disabled(self):
+        status = model_studio.dashboard()
+        self.assertEqual(status["project"], "AUTOMA X — MODEL STUDIO")
+        self.assertFalse(status["image_generation"]["generation_enabled"])
+        self.assertFalse(status["publishing"]["enabled"])
+
+    def test_plan_requires_reference(self):
+        with self.assertRaises(ValueError):
+            model_studio.create_production_plan({"objective": "Criar foto realista"})
+
+    def test_plan_is_not_a_generation(self):
+        plan = model_studio.create_production_plan({
+            "objective": "Criar foto em ambiente externo",
+            "reference_id": "reference-approved-01",
+            "platform": "Instagram",
+        })
+        self.assertEqual(plan["status"], "PLANNED_REFERENCE_REQUIRED")
+        self.assertFalse(plan["generation"]["started"])
+        self.assertFalse(plan["publishing"]["started"])
+
+    def test_unknown_platform_is_rejected(self):
+        with self.assertRaises(ValueError):
+            model_studio.create_production_plan({
+                "objective": "Criar foto em ambiente externo",
+                "reference_id": "reference-approved-01",
+                "platform": "YouTube",
+            })
+
+
+if __name__ == "__main__":
+    unittest.main()
