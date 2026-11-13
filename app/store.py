@@ -48,8 +48,14 @@ def init_db():
             "CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, role TEXT NOT NULL, content TEXT NOT NULL, created_at TEXT NOT NULL)",
         ]
     statements.extend([
+        "CREATE TABLE IF NOT EXISTS model_references (id TEXT PRIMARY KEY, mime_type TEXT NOT NULL, encrypted_data BYTEA, sha256 TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, created_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)",
+        "CREATE TABLE IF NOT EXISTS model_generated_images (id TEXT PRIMARY KEY, reference_id TEXT NOT NULL, mime_type TEXT NOT NULL, encrypted_data BYTEA NOT NULL, quality_json TEXT NOT NULL, objective TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL, review_status TEXT NOT NULL DEFAULT 'PENDING', review_note TEXT)",
         "CREATE TABLE IF NOT EXISTS oauth_states (state_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS social_connections (platform TEXT PRIMARY KEY, access_token_encrypted TEXT NOT NULL, refresh_token_encrypted TEXT NOT NULL, open_id TEXT, scopes TEXT NOT NULL, expires_at TEXT, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS agent_runs (id TEXT PRIMARY KEY, objective TEXT NOT NULL, composition TEXT NOT NULL, style TEXT NOT NULL, reference_id TEXT NOT NULL, status TEXT NOT NULL, current_step TEXT NOT NULL, result_json TEXT NOT NULL, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS agent_run_steps (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, bot_id TEXT NOT NULL, step_name TEXT NOT NULL, status TEXT NOT NULL, attempt INTEGER NOT NULL DEFAULT 0, input_json TEXT NOT NULL, output_json TEXT, error TEXT, started_at TEXT, completed_at TEXT, UNIQUE(run_id, step_name))",
+        "CREATE INDEX IF NOT EXISTS idx_agent_runs_status_created ON agent_runs(status, created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_agent_run_steps_run ON agent_run_steps(run_id)",
     ])
     with connect() as conn:
         for statement in statements:
@@ -194,3 +200,142 @@ def get_social_connection_status(platform):
     with connect() as conn:
         row = _execute(conn, "SELECT open_id, scopes, expires_at, updated_at FROM social_connections WHERE platform=?", (platform,)).fetchone()
     return dict(row) if row else None
+
+
+def save_model_reference(image_id, mime_type, encrypted_data, digest, width, height):
+    with connect() as conn:
+        _execute(conn, "UPDATE model_references SET active=0 WHERE active=1")
+        _execute(conn, "INSERT INTO model_references(id, mime_type, encrypted_data, sha256, width, height, created_at, active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
+            (image_id, mime_type, encrypted_data, digest, width, height, now()))
+
+
+def get_model_reference(reference_id=None):
+    with connect() as conn:
+        if reference_id:
+            row = _execute(conn, "SELECT * FROM model_references WHERE id=? AND active=1", (reference_id,)).fetchone()
+        else:
+            row = _execute(conn, "SELECT * FROM model_references WHERE active=1 ORDER BY created_at DESC LIMIT 1").fetchone()
+    return dict(row) if row else None
+
+
+def save_model_generated_image(image_id, reference_id, mime_type, encrypted_data, quality_json, objective, model):
+    with connect() as conn:
+        _execute(conn, "INSERT INTO model_generated_images(id, reference_id, mime_type, encrypted_data, quality_json, objective, model, created_at, review_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')",
+            (image_id, reference_id, mime_type, encrypted_data, quality_json, objective, model, now()))
+
+
+def get_model_generated_image(image_id):
+    with connect() as conn:
+        row = _execute(conn, "SELECT * FROM model_generated_images WHERE id=?", (image_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def review_model_generated_image(image_id, status, note=""):
+    with connect() as conn:
+        cur = _execute(conn, "UPDATE model_generated_images SET review_status=?, review_note=? WHERE id=?",
+            (status, note[:1000], image_id))
+        return cur.rowcount > 0
+
+
+# Persistent BOT_05 execution queue and per-agent step history.
+def save_agent_run(run):
+    sql = """INSERT INTO agent_runs
+             (id, objective, composition, style, reference_id, status, current_step,
+              result_json, error, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET status=excluded.status,
+             current_step=excluded.current_step, result_json=excluded.result_json,
+             error=excluded.error, updated_at=excluded.updated_at"""
+    with connect() as conn:
+        _execute(conn, sql, (
+            run["id"], run["objective"], run["composition"], run["style"], run["reference_id"],
+            run["status"], run["current_step"],
+            json.dumps(run.get("result") or {}, ensure_ascii=False),
+            run.get("error"), run["created_at"], run["updated_at"],
+        ))
+
+
+def _decode_agent_run(row):
+    if not row:
+        return None
+    item = dict(row)
+    raw = item.pop("result_json", None)
+    try:
+        item["result"] = json.loads(raw) if raw else {}
+    except (TypeError, ValueError):
+        item["result"] = {}
+    return item
+
+
+def get_agent_run(run_id):
+    with connect() as conn:
+        row = _execute(conn, "SELECT * FROM agent_runs WHERE id=?", (run_id,)).fetchone()
+    return _decode_agent_run(row)
+
+
+def list_agent_runs(statuses=None, limit=20):
+    sql = "SELECT * FROM agent_runs"
+    params = []
+    if statuses:
+        placeholders = ",".join(["?"] * len(statuses))
+        sql += " WHERE status IN (" + placeholders + ")"
+        params.extend(statuses)
+    sql += " ORDER BY created_at DESC LIMIT ?"
+    params.append(max(1, min(int(limit), 100)))
+    with connect() as conn:
+        rows = _execute(conn, sql, tuple(params)).fetchall()
+    return [_decode_agent_run(row) for row in rows]
+
+
+def claim_agent_run(run_id):
+    with connect() as conn:
+        cur = _execute(conn, "UPDATE agent_runs SET status='RUNNING', updated_at=? WHERE id=? AND status='QUEUED'",
+                        (now(), run_id))
+        return cur.rowcount == 1
+
+
+def save_agent_run_step(step):
+    sql = """INSERT INTO agent_run_steps
+             (id, run_id, bot_id, step_name, status, attempt, input_json, output_json,
+              error, started_at, completed_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(run_id, step_name) DO UPDATE SET status=excluded.status,
+             attempt=excluded.attempt, output_json=excluded.output_json, error=excluded.error,
+             started_at=excluded.started_at, completed_at=excluded.completed_at"""
+    with connect() as conn:
+        _execute(conn, sql, (
+            step["id"], step["run_id"], step["bot_id"], step["step_name"], step["status"],
+            int(step.get("attempt") or 0),
+            json.dumps(step.get("input") or {}, ensure_ascii=False),
+            json.dumps(step.get("output"), ensure_ascii=False) if step.get("output") is not None else None,
+            step.get("error"), step.get("started_at"), step.get("completed_at"),
+        ))
+
+
+def _decode_agent_step(row):
+    if not row:
+        return None
+    item = dict(row)
+    for source, target in (("input_json", "input"), ("output_json", "output")):
+        raw = item.pop(source, None)
+        try:
+            item[target] = json.loads(raw) if raw else ({} if target == "input" else None)
+        except (TypeError, ValueError):
+            item[target] = {} if target == "input" else None
+    return item
+
+
+def get_agent_run_step(run_id, step_name):
+    with connect() as conn:
+        row = _execute(conn, "SELECT * FROM agent_run_steps WHERE run_id=? AND step_name=?",
+                        (run_id, step_name)).fetchone()
+    return _decode_agent_step(row)
+
+
+def get_agent_run_steps(run_id):
+    sql = """SELECT * FROM agent_run_steps WHERE run_id=?
+             ORDER BY CASE bot_id WHEN 'BOT_01' THEN 1 WHEN 'BOT_02' THEN 2
+             WHEN 'BOT_03' THEN 3 WHEN 'BOT_04' THEN 4 ELSE 5 END"""
+    with connect() as conn:
+        rows = _execute(conn, sql, (run_id,)).fetchall()
+    return [_decode_agent_step(row) for row in rows]

@@ -1,22 +1,20 @@
 import os
+import json
 import logging
 import secrets
 import uuid
 from pathlib import Path
 from datetime import datetime, timezone
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response, UploadFile, File
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from . import store
-from .agents import list_agents
-from .orchestrator import submit_request
 from .config import get_groq_api_key, get_groq_env_names
-from .social import dashboard as social_dashboard, BOTS, PLATFORMS
-from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
 from . import supervisor, tiktok_oauth
 from .connections import get_connection_diagnostics
+from . import model_studio, model_studio_media, model_studio_orchestrator
 
 logger = logging.getLogger("automa_x.ai")
 
@@ -55,6 +53,30 @@ async def auth_check(request: Request):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=2, max_length=10000)
 
+class ModelStudioPlanRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=4000)
+    reference_id: str = Field(min_length=1, max_length=200)
+    platform: str = Field(default="Instagram", max_length=40)
+    composition: str = Field(default="group", max_length=40)
+    style: str = Field(default="photorealistic", max_length=60)
+
+class ModelStudioGenerateRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=2000)
+    composition: str = Field(default="group", max_length=40)
+    style: str = Field(default="photorealistic", max_length=60)
+
+class ModelStudioReviewRequest(BaseModel):
+    decision: str = Field(pattern="^(APPROVE|REJECT)$")
+    note: str = Field(default="", max_length=1000)
+
+class ModelStudioRunRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=2000)
+    composition: str = Field(default="group", max_length=80)
+    style: str = Field(default="photorealistic", max_length=100)
+
+class ModelStudioGenerationApprovalRequest(BaseModel):
+    decision: str = Field(pattern="^(APPROVE|REJECT)$")
+
 class SocialDraftRequest(BaseModel):
     bot_id: str = Field(pattern="^BOT_0[1-5]$")
     objective: str = Field(min_length=5, max_length=4000)
@@ -63,8 +85,8 @@ class SocialDraftRequest(BaseModel):
 class SocialWorkflowRequest(BaseModel):
     test_mode: bool = False
     objective: str = Field(min_length=5, max_length=4000)
-    platforms: list[str] = Field(default_factory=lambda: list(PLATFORMS), min_length=1, max_length=5)
-    content_types: list[str] = Field(default_factory=lambda: list(CONTENT_TYPES), min_length=1, max_length=5)
+    platforms: list[str] = Field(default_factory=lambda: list(model_studio.PLATFORMS), min_length=1, max_length=5)
+    content_types: list[str] = Field(default_factory=lambda: ["photo"], min_length=1, max_length=5)
 
 class ApprovalRequest(BaseModel):
     decision: str = Field(pattern="^(APPROVE|REJECT)$")
@@ -81,6 +103,7 @@ def startup():
         raise RuntimeError("API_ACCESS_TOKEN precisa estar configurado")
     store.init_db()
     supervisor.start_background_supervisor()
+    model_studio_orchestrator.start_background_executor()
 
 @app.get("/")
 def root():
@@ -119,22 +142,175 @@ def readiness():
             "durable": storage_backend == "postgresql" and database_connected,
         },
         "ai": {"provider": "Groq", "configured": bool(get_groq_api_key())},
-        "bots": {"registered": len(BOTS)},
-        "social": {"platforms_registered": len(PLATFORMS), "connected": 0},
+        "bots": {"registered": len(model_studio.MODEL_STUDIO_BOTS)},
+        "social": {"platforms_registered": len(model_studio.PLATFORMS), "connected": 0},
         "publishing": {"enabled": False},
     }
 
 @app.get("/agents")
 def agents():
-    return {"total": 31, "orchestrator": {"id": "AGENT_00", "name": "OPERACIONAL", "role": "Coordenador central"}, "specialists": list_agents()}
+    return {"total": len(model_studio.MODEL_STUDIO_BOTS), "orchestrator": {"id": "BOT_05", "name": "Master Operational", "role": "Coordenação central do Model Studio"}, "specialists": model_studio.MODEL_STUDIO_BOTS}
+
+@app.get("/model-studio/status")
+def model_studio_status():
+    result = model_studio.dashboard()
+    result["executor"] = model_studio_orchestrator.executor_status()
+    return result
+
+@app.get("/model-studio/automation/status")
+def model_studio_automation_status():
+    return model_studio_orchestrator.executor_status()
+
+@app.get("/model-studio/runs")
+def model_studio_runs(limit: int = 20):
+    return {"runs": model_studio_orchestrator.list_runs(limit)}
+
+@app.post("/model-studio/runs")
+def model_studio_create_run(payload: ModelStudioRunRequest):
+    try:
+        return model_studio_orchestrator.create_run(
+            payload.objective, payload.composition, payload.style
+        )
+    except ValueError as exc:
+        status = 409 if "referência" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+
+@app.get("/model-studio/runs/{run_id}")
+def model_studio_run_detail(run_id: str):
+    run = model_studio_orchestrator.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
+    return run
+
+@app.post("/model-studio/runs/{run_id}/generation-approval")
+def model_studio_generation_approval(run_id: str, payload: ModelStudioGenerationApprovalRequest):
+    try:
+        return model_studio_orchestrator.approve_generation(run_id, payload.decision)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+@app.post("/model-studio/runs/{run_id}/retry")
+def model_studio_retry_run(run_id: str):
+    try:
+        return model_studio_orchestrator.retry_failed_run(run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+@app.get("/model-studio/agents")
+def model_studio_agents():
+    return {"total": len(model_studio.MODEL_STUDIO_BOTS), "agents": model_studio.MODEL_STUDIO_BOTS}
+
+@app.get("/model-studio/reference")
+def model_studio_reference_status():
+    return model_studio_media.reference_status()
+
+@app.get("/model-studio/reference/image")
+def model_studio_reference_image():
+    try:
+        reference = model_studio_media.get_reference()
+        if not reference:
+            raise HTTPException(status_code=404, detail="Referência ainda não cadastrada.")
+        record, raw = reference
+        return Response(content=raw, media_type=record["mime_type"], headers={"Cache-Control": "private, no-store"})
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+@app.post("/model-studio/reference")
+async def model_studio_upload_reference(file: UploadFile = File(...)):
+    try:
+        raw = await file.read(model_studio_media.MAX_IMAGE_BYTES + 1)
+        result = model_studio_media.save_reference(raw)
+        return {"status": "stored", **result}
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    finally:
+        await file.close()
+
+@app.post("/model-studio/generate")
+def model_studio_generate(payload: ModelStudioGenerateRequest):
+    raise HTTPException(
+        status_code=410,
+        detail="Geração direta desativada. Inicie uma execução BOT_05 em /model-studio/runs e aprove a chamada paga antes de gerar.",
+    )
+
+@app.get("/model-studio/images/{image_id}/quality")
+def model_studio_image_quality(image_id: str):
+    loaded = model_studio_media.load_generated(image_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+    record, _ = loaded
+    return {"image_id": image_id, "quality": json.loads(record["quality_json"]),
+            "review_status": record.get("review_status", "PENDING"),
+            "review_note": record.get("review_note")}
+
+@app.post("/model-studio/images/{image_id}/review")
+def model_studio_review_image(image_id: str, payload: ModelStudioReviewRequest):
+    status = "APPROVED" if payload.decision == "APPROVE" else "REJECTED"
+    if not store.review_model_generated_image(image_id, status, payload.note):
+        raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+    run = model_studio_orchestrator.record_identity_review(image_id, payload.decision, payload.note)
+    return {"image_id": image_id, "review_status": status,
+            "run_status": run.get("status") if run else None,
+            "note": "Revisão humana registrada. Isso não executa publicação externa."}
+
+@app.get("/model-studio/images/{image_id}")
+def model_studio_get_image(image_id: str):
+    try:
+        loaded = model_studio_media.load_generated(image_id)
+        if not loaded:
+            raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+        record, raw = loaded
+        return Response(content=raw, media_type=record["mime_type"], headers={"Cache-Control": "private, no-store"})
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+@app.post("/model-studio/plan")
+def model_studio_plan(payload: ModelStudioPlanRequest):
+    try:
+        plan = model_studio.create_production_plan(payload.model_dump())
+        task_id = str(uuid.uuid4())
+        task = {
+            "id": task_id,
+            "request": payload.objective,
+            "status": plan["status"],
+            "plan": {"selected_agents": plan["workflow"], "workflow": "MODEL_STUDIO", "platform": plan["platform"]},
+            "result": plan,
+            "created_at": store.now(),
+        }
+        store.save_task(task)
+        return {"task_id": task_id, **plan}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 @app.post("/chat")
 def chat(payload: ChatRequest):
+    """Conversa com BOT_05 e persiste o histórico; não executa ações externas."""
+    history = store.get_messages(limit=10)
     store.add_message("user", payload.message)
-    task = submit_request(payload.message)
-    response = {"task_id": task["id"], "status": task["status"], "operational_agent": "AGENT_00", "agents_selected": task["plan"]["selected_agents"], "plan": task["plan"], "result": task["result"]}
-    store.add_message("assistant", f"Plano {task['id']} criado com status {task['status']}.")
-    return response
+    try:
+        answer = model_studio.chat_with_master(payload.message, history)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        logger.warning("Chat BOT_05 indisponível: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="O chat está acessível, mas o provedor de IA não conseguiu responder. Confira a configuração GROQ_API_KEY e o limite de uso."
+        ) from exc
+    store.add_message("assistant", answer)
+    return {
+        "role": "assistant",
+        "bot_id": "BOT_05",
+        "bot_name": "Master Operational",
+        "content": answer,
+        "created_at": store.now(),
+    }
 
 @app.get("/tasks")
 def tasks():
@@ -164,7 +340,7 @@ def schedules():
 
 @app.post("/schedules")
 def create_schedule(payload: ScheduleRequest):
-    if payload.platform not in PLATFORMS:
+    if payload.platform not in model_studio.PLATFORMS:
         raise HTTPException(status_code=422, detail="Plataforma não suportada.")
     if payload.scheduled_at.tzinfo is None:
         raise HTTPException(status_code=422, detail="Informe data e horário com fuso horário.")
@@ -212,14 +388,14 @@ def system_status():
             "note": "configured indica apenas presença da chave; verified exige chamada real ao provedor.",
         },
         "bots": {
-            "registered": len(BOTS),
-            "ids": [bot["id"] for bot in BOTS],
+            "registered": len(model_studio.MODEL_STUDIO_BOTS),
+            "ids": [bot["id"] for bot in model_studio.MODEL_STUDIO_BOTS],
             "execution_verified": False,
             "note": "Cadastro não equivale a execução validada de ponta a ponta.",
         },
         "social_platforms": [
             {"name": name, "connected": False, "publishing_enabled": False}
-            for name in PLATFORMS
+            for name in model_studio.PLATFORMS
         ],
         "safety": {
             "external_publishing_enabled": False,
@@ -296,7 +472,8 @@ def connections_diagnostics():
 
 @app.get("/social/dashboard")
 def social_home():
-    return social_dashboard()
+    # Compatibility alias: the primary dashboard is now Model Studio.
+    return model_studio.dashboard()
 
 @app.get("/ai/status")
 def ai_status():
@@ -326,78 +503,16 @@ def ai_status():
 
 @app.get("/social/agents")
 def social_agents():
-    return {"total": len(BOTS), "agents": BOTS}
+    return {"total": len(model_studio.MODEL_STUDIO_BOTS), "agents": model_studio.MODEL_STUDIO_BOTS}
 
 @app.post("/social/draft")
 def social_draft(payload: SocialDraftRequest):
-    if payload.bot_id not in ("BOT_02", "BOT_03"):
-        raise HTTPException(status_code=400, detail="Este bot não é responsável por gerar conteúdo.")
-    if not get_groq_api_key():
-        raise HTTPException(status_code=503, detail="IA ainda não configurada. O painel funciona, mas adicione um provedor de IA ao serviço da API para gerar conteúdo.")
-    bot = next(item for item in BOTS if item["id"] == payload.bot_id)
-    agent = {"id": bot["id"], "name": bot["name"], "function": bot["description"] + " Responsabilidades: " + "; ".join(bot["responsibilities"])}
-    prompt = "Plataforma: " + payload.platform + "\nObjetivo: " + payload.objective + "\nCrie um pacote de conteúdo pronto para revisão humana, com gancho, roteiro/legenda, descrição, hashtags e CTA. Não afirme que publicou."
-    try:
-        draft = ask_agent(agent, prompt)
-        task_id = str(uuid.uuid4())
-        approval_id = str(uuid.uuid4())
-        created_at = store.now()
-        task = {
-            "id": task_id,
-            "request": payload.objective,
-            "status": "DRAFT_REVIEW",
-            "plan": {"selected_agents": [bot["id"]], "platform": payload.platform, "workflow": "SOCIAL_CONTENT"},
-            "result": {"draft": draft, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform},
-            "created_at": created_at
-        }
-        store.save_task(task)
-        store.create_approval(approval_id, task_id, "Revisar rascunho de " + payload.platform + " · " + bot["name"])
-        return {"task_id": task_id, "approval_id": approval_id, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform, "draft": draft, "status": "DRAFT_REVIEW", "approval_required": True}
-    except Exception as exc:
-        logger.error("Falha ao gerar rascunho com IA: %s", str(exc)[:500])
-        key = get_groq_api_key()
-        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
-        raise HTTPException(status_code=502, detail="Falha na geração: " + safe_detail[:500])
+    raise HTTPException(status_code=410, detail="Fluxo antigo de campanhas desativado. Utilize /model-studio/plan.")
 
 
 @app.post("/social/workflow")
 def social_workflow(payload: SocialWorkflowRequest):
-    unknown_platforms = sorted(set(payload.platforms) - set(PLATFORMS))
-    if unknown_platforms:
-        raise HTTPException(
-            status_code=422,
-            detail={"message": "Plataforma não suportada.", "invalid_platforms": unknown_platforms},
-        )
-
-    unknown_content_types = sorted(set(payload.content_types) - set(CONTENT_TYPES))
-    if unknown_content_types:
-        raise HTTPException(
-            status_code=422,
-            detail={"message": "Formato de conteúdo não suportado.", "invalid_content_types": unknown_content_types},
-        )
-
-    if len(set(payload.platforms)) != len(payload.platforms):
-        raise HTTPException(status_code=422, detail="Não repita plataformas na mesma solicitação.")
-    if len(set(payload.content_types)) != len(payload.content_types):
-        raise HTTPException(status_code=422, detail="Não repita formatos na mesma solicitação.")
-
-    if not get_groq_api_key():
-        raise HTTPException(
-            status_code=503,
-            detail="IA ainda não configurada. Adicione GROQ_API_KEY nas variáveis do serviço da API.",
-        )
-
-    try:
-        result = generate_social_workflow(payload.model_dump())
-        return result
-    except Exception as exc:
-        logger.error("Falha no fluxo dos cinco bots: %s", str(exc)[:500])
-        key = get_groq_api_key()
-        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
-        raise HTTPException(
-            status_code=502,
-            detail="Falha no fluxo dos cinco bots: " + safe_detail[:500],
-        )
+    raise HTTPException(status_code=410, detail="Fluxo antigo de campanhas substituído pelo AUTOMA X — MODEL STUDIO.")
 
 # Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
 app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])

@@ -1,0 +1,24 @@
+name: Model Studio tests
+
+on:
+  push:
+    branches:
+      - feature/automa-x-model-studio
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install runtime dependencies
+        run: pip install -r requirements.txt
+      - name: Run Model Studio unit tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Compile application modules
+        run: python -m compileall -q app
