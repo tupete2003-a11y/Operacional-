@@ -128,8 +128,7 @@ def _save_run(run: dict[str, Any], *, status: str | None = None, current_step: s
         updated["current_step"] = current_step
     if result is not None:
         updated["result"] = result
-    if error is not None:
-        updated["error"] = error[:1000]
+    updated["error"] = error[:1000] if error else None
     store.save_agent_run(updated)
     return updated
 
@@ -294,37 +293,38 @@ def process_run(run_id: str) -> None:
             return
 
         step = store.get_agent_run_step(run_id, "image_generation")
-        attempt = int((step or {}).get("attempt") or 0) + 1
-        _save_step(run_id, "image_generation", status="RUNNING", attempt=attempt, error=None, started_at=_now())
-        try:
-            reference = model_studio_media.get_reference(run["reference_id"])
-            if not reference:
-                raise model_studio_media.ModelStudioError("A referência desta execução não está mais ativa; envie novamente a referência.")
-            reference_record, reference_bytes = reference
-            image_bytes, model_name = model_studio_media.generate_from_reference(
-                reference_bytes, objective, run["composition"], run["style"]
-            )
-            generated = model_studio_media.save_generated(
-                image_bytes, reference_record["id"], objective, model_name
-            )
-            image_output = {**generated, "image_url": "/model-studio/images/" + generated["image_id"]}
-            _save_step(run_id, "image_generation", status="SUCCEEDED", attempt=attempt,
-                       output=image_output, completed_at=_now())
-            run = store.get_agent_run(run_id)
-            results = dict(run.get("result") or {})
-            results["image"] = image_output
-            results["generation_approved"] = True
-            _save_run(run, result=results, error=None)
-        except Exception as exc:
-            # A network timeout can happen after the provider accepted a paid request.
-            # Never retry a paid image request automatically; require a new approval.
-            _save_step(run_id, "image_generation", status="FAILED", attempt=attempt,
-                       error=f"{type(exc).__name__}: {str(exc)[:700]}", completed_at=_now())
-            run = store.get_agent_run(run_id)
-            _save_run(run, status="FAILED", current_step="BOT_03",
-                      error="A geração falhou ou teve resultado incerto. Não haverá repetição automática para evitar cobrança duplicada.")
-            logger.warning("Geração BOT_03 falhou; repetição automática bloqueada.")
-            return
+        if not step or step["status"] != "SUCCEEDED":
+            attempt = int((step or {}).get("attempt") or 0) + 1
+            _save_step(run_id, "image_generation", status="RUNNING", attempt=attempt, error=None, started_at=_now())
+            try:
+                reference = model_studio_media.get_reference(run["reference_id"])
+                if not reference:
+                    raise model_studio_media.ModelStudioError("A referência desta execução não está mais ativa; envie novamente a referência.")
+                reference_record, reference_bytes = reference
+                image_bytes, model_name = model_studio_media.generate_from_reference(
+                    reference_bytes, objective, run["composition"], run["style"]
+                )
+                generated = model_studio_media.save_generated(
+                    image_bytes, reference_record["id"], objective, model_name
+                )
+                image_output = {**generated, "image_url": "/model-studio/images/" + generated["image_id"]}
+                _save_step(run_id, "image_generation", status="SUCCEEDED", attempt=attempt,
+                           output=image_output, completed_at=_now())
+                run = store.get_agent_run(run_id)
+                results = dict(run.get("result") or {})
+                results["image"] = image_output
+                results["generation_approved"] = True
+                _save_run(run, result=results, error=None)
+            except Exception as exc:
+                # A network timeout can happen after the provider accepted a paid request.
+                # Never retry a paid image request automatically; require a new approval.
+                _save_step(run_id, "image_generation", status="FAILED", attempt=attempt,
+                           error=f"{type(exc).__name__}: {str(exc)[:700]}", completed_at=_now())
+                run = store.get_agent_run(run_id)
+                _save_run(run, status="FAILED", current_step="BOT_03",
+                          error="A geração falhou ou teve resultado incerto. Não haverá repetição automática para evitar cobrança duplicada.")
+                logger.warning("Geração BOT_03 falhou; repetição automática bloqueada.")
+                return
 
         run = store.get_agent_run(run_id)
         quality = (run.get("result") or {}).get("image", {}).get("quality") or {}
