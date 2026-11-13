@@ -234,22 +234,10 @@ async def model_studio_upload_reference(file: UploadFile = File(...)):
 
 @app.post("/model-studio/generate")
 def model_studio_generate(payload: ModelStudioGenerateRequest):
-    try:
-        reference = model_studio_media.get_reference()
-        if not reference:
-            raise HTTPException(status_code=409, detail="Envie primeiro a foto de referência da modelo.")
-        reference_record, reference_bytes = reference
-        image_bytes, model_name = model_studio_media.generate_from_reference(
-            reference_bytes, payload.objective, payload.composition, payload.style
-        )
-        result = model_studio_media.save_generated(
-            image_bytes, reference_record["id"], payload.objective, model_name
-        )
-        return {"status": result["quality"]["status"], "reference_id": reference_record["id"], **result,
-                "image_url": "/model-studio/images/" + result["image_id"],
-                "identity_review": "A confirmação de que é a mesma modelo exige revisão visual humana."}
-    except model_studio_media.ModelStudioError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+    raise HTTPException(
+        status_code=410,
+        detail="Geração direta desativada. Inicie uma execução BOT_05 em /model-studio/runs e aprove a chamada paga antes de gerar.",
+    )
 
 @app.get("/model-studio/images/{image_id}/quality")
 def model_studio_image_quality(image_id: str):
