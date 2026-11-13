@@ -8,27 +8,95 @@
 <section class="grid stats"><article class="panel"><div class="muted">Bots especializados</div><div class="num" id="botCount">5</div></article><article class="panel"><div class="muted">Foto de referência</div><div class="num" id="refState">Pendente</div></article><article class="panel"><div class="muted">Provedor de imagem</div><div class="num" id="providerState">Pendente</div><div class="muted" id="providerNote">OpenAI Images API</div></article><article class="panel"><div class="muted">Publicação externa</div><div class="num">Desativada</div><div class="muted">Aprovação humana obrigatória</div></article></section>
 <h2>Os cinco bots</h2><section class="grid bots"><article class="panel"><span class="tag">BOT 01</span><h3>Scene Planner</h3><p class="muted">Cenários, figurinos, poses e composição.</p></article><article class="panel"><span class="tag">BOT 02</span><h3>Visual Research</h3><p class="muted">Referências, estilos, iluminação e ambientes.</p></article><article class="panel"><span class="tag">BOT 03</span><h3>Photo Creator</h3><p class="muted">Geração com a foto de referência.</p></article><article class="panel"><span class="tag">BOT 04</span><h3>Identity Guardian</h3><p class="muted">Qualidade técnica e revisão visual humana.</p></article><article class="panel"><span class="tag">BOT 05</span><h3>Master Operational</h3><p class="muted">Coordenação, histórico e segurança.</p></article></section>
 <h2>Conexão segura</h2><section class="panel"><div class="row"><div><label>URL da API</label><input id="apiUrl" value="https://automa-x-api.onrender.com"></div><div><label>Chave da API</label><input id="apiKey" type="password" autocomplete="off" placeholder="X-API-Key"></div></div><div class="actions"><button class="primary" id="connect">Conectar e verificar</button><button id="forget">Limpar chave da sessão</button></div><div class="result" id="connectionResult">Informe sua chave para consultar o estado privado da API.</div><p class="muted">A chave permanece apenas na memória desta aba; não é salva no repositório.</p></section>
-<h2>Chat operacional · BOT 05</h2><section class="panel"><div id="chatLog" class="chat-log" role="log" aria-live="polite" aria-relevant="additions text"><div class="chat-empty">Conecte a API para iniciar uma conversa com o Master Operational.</div></div><label for="chatInput">Mensagem para o BOT 05</label><textarea id="chatInput" rows="3" placeholder="Ex.: Kayan, planeje a próxima sessão fotográfica..." disabled></textarea><div class="actions"><button class="primary" id="sendChat" disabled>Enviar mensagem</button></div><div class="muted" id="chatStatus">O chat usa o provedor de texto Groq. As mensagens não executam publicações nem ações externas.</div></section>
+<h2>Chat operacional · BOT 05</h2><section class="panel"><div id="chatLog" class="chat-log" role="log" aria-live="polite" aria-relevant="additions text"><div class="chat-empty">Conecte a API para iniciar uma conversa com o Master Operational.</div></div><label for="chatInput">Mensagem para o BOT 05</label><textarea id="chatInput" rows="3" placeholder="Ex.: Kayan, planeje a próxima sessão fotográfica..." disabled></textarea><div class="actions"><button class="primary" id="sendChat" disabled>Enviar mensagem</button></div><div class="muted" id="chatStatus">O chat usa Groq para conversar. A execução real é iniciada na seção Produção fotográfica; publicações seguem bloqueadas.</div></section>
 <h2>Foto de referência da modelo</h2><section class="grid two"><article class="panel"><p class="muted">JPEG, PNG ou WEBP; até 12 MB. O backend normaliza a imagem e guarda o conteúdo criptografado no PostgreSQL.</p><label>Selecionar imagem</label><input id="referenceFile" type="file" accept="image/jpeg,image/png,image/webp"><div class="actions"><button class="primary" id="uploadRef">Enviar e armazenar</button><button id="refresh">Atualizar status</button></div><div class="result" id="referenceResult">Aguardando conexão.</div></article><article class="panel"><div class="muted">Prévia da referência ativa</div><img id="referencePreview" class="preview" alt="Foto de referência" hidden></article></section>
-<h2>Produção fotográfica</h2><section class="grid two"><article class="panel"><label>Objetivo da fotografia</label><textarea id="objective" rows="4" placeholder="Ex.: foto espontânea em um café moderno, luz natural..."></textarea><div class="row"><div><label>Composição</label><input id="composition" value="group"></div><div><label>Estilo</label><input id="style" value="photorealistic"></div></div><div class="actions"><button class="primary" id="generate">Gerar foto com referência</button></div><p class="muted">A geração usa a API de edição de imagens da OpenAI e pode gerar custos na conta de API. Só será executada quando a chave estiver configurada no Render.</p><div class="result" id="generationResult">Aguardando solicitação.</div></article><article class="panel"><div class="muted">Resultado gerado</div><img id="generatedPreview" class="preview" alt="Imagem gerada" hidden><div class="actions"><button id="approveImage" disabled>Aprovar identidade visual</button><button id="rejectImage" disabled>Rejeitar imagem</button></div><div class="notice" id="qualityResult">A semelhança da identidade exige confirmação visual humana; não executamos reconhecimento facial biométrico.</div></article></section>
+<h2>Produção fotográfica</h2><section class="grid two"><article class="panel"><label>Objetivo da fotografia</label><textarea id="objective" rows="4" placeholder="Ex.: foto espontânea em um café moderno, luz natural..."></textarea><div class="row"><div><label>Composição</label><input id="composition" value="group"></div><div><label>Estilo</label><input id="style" value="photorealistic"></div></div><div class="actions"><button class="primary" id="generate">Iniciar fluxo automático pelo BOT 05</button><button id="approveGeneration" disabled>Autorizar geração paga</button><button id="rejectGeneration" disabled>Recusar geração</button><button id="retryRun" disabled>Retomar etapa com falha</button></div><p class="muted">BOT 05 coordena os bots 01–04. A geração de imagem só acontece após aprovação específica, pois a OpenAI Images API pode gerar cobrança. Etapas textuais têm até duas tentativas; uma chamada de imagem nunca é repetida automaticamente. A publicação externa permanece desativada.</p><div class="result" id="automationRunStatus">Aguardando conexão e comando do operador.</div><div class="result" id="generationResult">Aguardando solicitação.</div></article><article class="panel"><div class="muted">Resultado gerado</div><img id="generatedPreview" class="preview" alt="Imagem gerada" hidden><div class="actions"><button id="approveImage" disabled>Aprovar identidade visual</button><button id="rejectImage" disabled>Rejeitar imagem</button></div><div class="notice" id="qualityResult">A semelhança da identidade exige confirmação visual humana; não executamos reconhecimento facial biométrico.</div></article></section>
 <div class="footer">AUTOMA X — MODEL STUDIO · Produção diária planejada · Instagram, TikTok, Facebook e Kwai · Sem publicação automática.</div></main>
 <script>
-const $=id=>document.getElementById(id);let apiKey="",apiUrl=$("apiUrl").value,generatedId="";
+const $=id=>document.getElementById(id);let apiKey="",apiUrl=$("apiUrl").value,generatedId="",activeRunId="",runPollHandle=null;
 function headers(extra={}){return {"X-API-Key":apiKey,...extra}}
 async function api(path,opts={}){const r=await fetch(apiUrl.replace(/\/$/,"")+path,{...opts,headers:headers(opts.headers||{})});const type=r.headers.get("content-type")||"";const data=type.includes("application/json")?await r.json():await r.blob();if(!r.ok)throw Error(data.detail||"HTTP "+r.status);return data}
 async function refreshReference(){const s=await api("/model-studio/reference");$("refState").textContent=s.registered?"Cadastrada":"Pendente";$("referenceResult").textContent=JSON.stringify(s,null,2);if(s.registered){const b=await api("/model-studio/reference/image");$("referencePreview").src=URL.createObjectURL(b);$("referencePreview").hidden=false}else $("referencePreview").hidden=true}
 
 function addChatMessage(role,content){const log=$("chatLog");const empty=log.querySelector(".chat-empty");if(empty)empty.remove();const item=document.createElement("div");item.className="chat-message "+(role==="user"?"user":"assistant");item.textContent=content;log.appendChild(item);log.scrollTop=log.scrollHeight}
 function renderChat(messages){const log=$("chatLog");log.textContent="";if(!messages.length){const empty=document.createElement("div");empty.className="chat-empty";empty.textContent="Nenhuma mensagem ainda. Converse com o BOT 05 para começar.";log.appendChild(empty);return}messages.forEach(m=>addChatMessage(m.role,m.content||""))}
-async function loadChatHistory(){try{const d=await api("/memory");renderChat(d.recent_messages||[]);$("chatInput").disabled=false;$("sendChat").disabled=false;$("chatStatus").textContent="Histórico carregado. Conversa coordenada pelo BOT 05 — Master Operational."}catch(e){$("chatStatus").textContent="Não foi possível carregar o histórico: "+e.message}}
+async function loadChatHistory(){try{const d=await api("/memory");renderChat(d.recent_messages||[]);$("chatInput").disabled=false;$("sendChat").disabled=false;$("chatStatus").textContent="Histórico carregado. Use a seção de produção para disparar o executor BOT 05."}catch(e){$("chatStatus").textContent="Não foi possível carregar o histórico: "+e.message}}
 async function sendChat(){const message=$("chatInput").value.trim();if(message.length<2){$("chatStatus").textContent="Escreva uma mensagem com pelo menos 2 caracteres.";return}if(!apiKey){$("chatStatus").textContent="Conecte a API antes de enviar.";return}const button=$("sendChat");button.disabled=true;addChatMessage("user",message);$("chatInput").value="";$("chatStatus").textContent="BOT 05 está preparando a resposta...";try{const d=await api("/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({message})});addChatMessage("assistant",d.content||"Resposta recebida sem texto.");$("chatStatus").textContent="Resposta recebida do BOT 05 — Master Operational."}catch(e){$("chatStatus").textContent="Falha ao obter resposta: "+e.message}finally{button.disabled=false;$("chatInput").focus()}}
 
-$("connect").onclick=async()=>{apiUrl=$("apiUrl").value.trim();apiKey=$("apiKey").value.trim();if(!apiKey){$("connectionResult").textContent="Informe a chave da API.";return}try{const [s,a]=await Promise.all([api("/model-studio/status"),api("/model-studio/agents")]);$("apiState").textContent="API conectada";$("botCount").textContent=a.total;$("providerState").textContent=s.image_generation.generation_enabled?"Configurado":"Pendente";$("providerNote").textContent=s.image_generation.reason||s.image_generation.model;$("chatStatus").textContent=s.chat?.configured?"Groq detectada; resposta real ainda depende da conexão e do limite de uso.":"GROQ_API_KEY não detectada no backend. O chat abre, mas precisa do provedor para responder.";$("connectionResult").textContent=JSON.stringify(s,null,2);await refreshReference();await loadChatHistory()}catch(e){$("apiState").textContent="Falha na conexão";$("connectionResult").textContent=e.message}};
+$("connect").onclick=async()=>{apiUrl=$("apiUrl").value.trim();apiKey=$("apiKey").value.trim();if(!apiKey){$("connectionResult").textContent="Informe a chave da API.";return}try{const [s,a]=await Promise.all([api("/model-studio/status"),api("/model-studio/agents")]);$("apiState").textContent="API conectada";$("botCount").textContent=a.total;$("providerState").textContent=s.image_generation.generation_enabled?"Configurado":"Pendente";$("providerNote").textContent=s.image_generation.reason||s.image_generation.model;$("chatStatus").textContent=s.chat?.configured?"Groq detectada; resposta real ainda depende da conexão e do limite de uso.":"GROQ_API_KEY não detectada no backend. O chat abre, mas precisa do provedor para responder.";$("connectionResult").textContent=JSON.stringify(s,null,2);await refreshReference();await loadChatHistory();await restoreLatestRun()}catch(e){$("apiState").textContent="Falha na conexão";$("connectionResult").textContent=e.message}};
 $("sendChat").onclick=sendChat;$("chatInput").addEventListener("keydown",event=>{if(event.key==="Enter"&&!event.shiftKey){event.preventDefault();sendChat()}});
 $("forget").onclick=()=>{apiKey="";$("apiKey").value="";$("connectionResult").textContent="Chave removida da memória desta aba."};
 $("refresh").onclick=()=>refreshReference().catch(e=>$("referenceResult").textContent=e.message);
 $("uploadRef").onclick=async()=>{const f=$("referenceFile").files[0];if(!f){$("referenceResult").textContent="Selecione uma foto.";return}if(!apiKey){$("referenceResult").textContent="Conecte a API primeiro.";return}const fd=new FormData();fd.append("file",f);try{const r=await fetch(apiUrl.replace(/\/$/,"")+"/model-studio/reference",{method:"POST",headers:{"X-API-Key":apiKey},body:fd});const d=await r.json();if(!r.ok)throw Error(d.detail||"HTTP "+r.status);$("referenceResult").textContent=JSON.stringify(d,null,2);await refreshReference()}catch(e){$("referenceResult").textContent=e.message}};
-async function reviewImage(decision){if(!generatedId)return;const note=decision==="APPROVE"?"Identidade e qualidade visual conferidas manualmente.":"Imagem reprovada na revisão visual humana.";try{const d=await api("/model-studio/images/"+generatedId+"/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decision,note})});$("qualityResult").textContent=JSON.stringify(d,null,2);$("approveImage").disabled=true;$("rejectImage").disabled=true}catch(e){$("qualityResult").textContent=e.message}}
+async function reviewImage(decision){if(!generatedId)return;const note=decision==="APPROVE"?"Identidade e qualidade visual conferidas manualmente.":"Imagem reprovada na revisão visual humana.";try{const d=await api("/model-studio/images/"+generatedId+"/review",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decision,note})});$("qualityResult").textContent=JSON.stringify(d,null,2);$("approveImage").disabled=true;$("rejectImage").disabled=true;if(activeRunId)await refreshRun()}catch(e){$("qualityResult").textContent=e.message}}
 $("approveImage").onclick=()=>reviewImage("APPROVE");$("rejectImage").onclick=()=>reviewImage("REJECT");
-$("generate").onclick=async()=>{const objective=$("objective").value.trim();if(objective.length<5){$("generationResult").textContent="Descreva a cena desejada.";return}if(!apiKey){$("generationResult").textContent="Conecte a API primeiro.";return}const b=$("generate");b.disabled=true;try{const d=await api("/model-studio/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({objective,composition:$("composition").value,style:$("style").value})});generatedId=d.image_id;$("approveImage").disabled=false;$("rejectImage").disabled=false;$("generationResult").textContent=JSON.stringify(d,null,2);const img=await api(d.image_url);$("generatedPreview").src=URL.createObjectURL(img);$("generatedPreview").hidden=false;$("qualityResult").textContent=JSON.stringify(d.quality,null,2)+"\nRevisão humana da identidade obrigatória."}catch(e){$("generationResult").textContent=e.message}finally{b.disabled=false}};
+async function renderRun(d){
+  activeRunId=d.id||activeRunId;
+  const steps=(d.steps||[]).map(s=>({bot:s.bot_id,stage:s.step_name,status:s.status,attempt:s.attempt,error:s.error||null}));
+  $("automationRunStatus").textContent=JSON.stringify({run_id:d.id,status:d.status,current_step:d.current_step,error:d.error,steps},null,2);
+  const bot3=(d.steps||[]).find(s=>s.bot_id==="BOT_03");
+  const image=(bot3&&bot3.output)||((d.result||{}).image)||{};
+  if(image.image_id){
+    generatedId=image.image_id;
+    $("approveImage").disabled=false;
+    $("rejectImage").disabled=false;
+    if(!$("generatedPreview").src||$("generatedPreview").hidden){
+      try{const blob=await api("/model-studio/images/"+generatedId);$("generatedPreview").src=URL.createObjectURL(blob);$("generatedPreview").hidden=false}catch(e){$("qualityResult").textContent="Imagem registrada; prévia indisponível: "+e.message}
+    }
+    $("generationResult").textContent=JSON.stringify(image,null,2);
+    $("qualityResult").textContent=JSON.stringify(image.quality||{},null,2)+"\nA identidade ainda precisa de revisão visual humana.";
+  }
+  const waiting=d.status==="WAITING_APPROVAL";
+  $("approveGeneration").disabled=!waiting;
+  $("rejectGeneration").disabled=!waiting;
+  $("retryRun").disabled=d.status!=="FAILED";
+  if(d.status==="WAITING_APPROVAL")$("automationRunStatus").textContent+="\n\nAguardando sua autorização para uma chamada de geração que pode gerar cobrança.";
+  if(d.status==="WAITING_REVIEW")$("automationRunStatus").textContent+="\n\nA imagem está pronta para conferência visual humana.";
+}
+async function refreshRun(){
+  if(!activeRunId)return;
+  const d=await api("/model-studio/runs/"+activeRunId);
+  await renderRun(d);
+  if(["COMPLETED","REJECTED","FAILED"].includes(d.status)&&runPollHandle){clearInterval(runPollHandle);runPollHandle=null}
+}
+async function pollRun(){
+  try{await refreshRun()}catch(e){$("automationRunStatus").textContent="Falha ao consultar execução: "+e.message}
+}
+async function restoreLatestRun(){
+  try{const data=await api("/model-studio/runs?limit=1");if(data.runs&&data.runs.length){activeRunId=data.runs[0].id;await refreshRun();if(["QUEUED","RUNNING","WAITING_APPROVAL","WAITING_REVIEW"].includes(data.runs[0].status)&&!runPollHandle)runPollHandle=setInterval(pollRun,4000)}}catch(e){$("automationRunStatus").textContent="Não foi possível restaurar o histórico de execuções: "+e.message}
+}
+$("generate").onclick=async()=>{
+  const objective=$("objective").value.trim();
+  if(objective.length<5){$("generationResult").textContent="Descreva a cena desejada.";return}
+  if(!apiKey){$("generationResult").textContent="Conecte a API primeiro.";return}
+  const b=$("generate");b.disabled=true;
+  $("automationRunStatus").textContent="BOT 05 está registrando e enfileirando a execução...";
+  $("approveGeneration").disabled=true;$("rejectGeneration").disabled=true;$("retryRun").disabled=true;
+  try{
+    const d=await api("/model-studio/runs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({objective,composition:$("composition").value,style:$("style").value})});
+    activeRunId=d.id;await renderRun(d);
+    if(runPollHandle)clearInterval(runPollHandle);
+    runPollHandle=setInterval(pollRun,4000);
+    await pollRun();
+  }catch(e){$("automationRunStatus").textContent="Não foi possível iniciar o fluxo: "+e.message}
+  finally{b.disabled=false}
+};
+$("approveGeneration").onclick=async()=>{
+  if(!activeRunId)return;
+  $("approveGeneration").disabled=true;$("rejectGeneration").disabled=true;
+  try{const d=await api("/model-studio/runs/"+activeRunId+"/generation-approval",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decision:"APPROVE"})});await renderRun(d);if(!runPollHandle)runPollHandle=setInterval(pollRun,4000);await pollRun()}
+  catch(e){$("automationRunStatus").textContent="A aprovação não foi aplicada: "+e.message}
+};
+$("rejectGeneration").onclick=async()=>{
+  if(!activeRunId)return;
+  $("approveGeneration").disabled=true;$("rejectGeneration").disabled=true;
+  try{const d=await api("/model-studio/runs/"+activeRunId+"/generation-approval",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decision:"REJECT"})});await renderRun(d);if(runPollHandle){clearInterval(runPollHandle);runPollHandle=null}}
+  catch(e){$("automationRunStatus").textContent="Não foi possível registrar a recusa: "+e.message}
+};
+$("retryRun").onclick=async()=>{
+  if(!activeRunId)return;
+  $("retryRun").disabled=true;
+  try{const d=await api("/model-studio/runs/"+activeRunId+"/retry",{method:"POST"});await renderRun(d);if(d.status==="QUEUED"||d.status==="WAITING_APPROVAL"){if(!runPollHandle)runPollHandle=setInterval(pollRun,4000)}}
+  catch(e){$("automationRunStatus").textContent="Não foi possível retomar: "+e.message}
+};
 </script></body></html>
