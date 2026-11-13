@@ -12,7 +12,7 @@ MODEL_STUDIO_BOTS = [
     {"id":"BOT_02","name":"Visual Research","role":"Pesquisa visual","responsibilities":["Pesquisar referências e tendências visuais","Sugerir ambientes, iluminação, composição e direção de arte","Registrar a origem das referências"]},
     {"id":"BOT_03","name":"Photo Creator","role":"Criação fotográfica","responsibilities":["Preparar prompts fotográficos usando a referência aprovada","Solicitar geração apenas quando houver provedor de imagem configurado","Preservar aparência natural e evitar detalhes inventados"]},
     {"id":"BOT_04","name":"Identity Guardian","role":"Verificação de identidade e qualidade","responsibilities":["Conferir semelhança com a referência aprovada","Verificar rosto, cabelo, proporções, anatomia, mãos, iluminação e artefatos","Sinalizar resultados para revisão humana; não declarar biometria validada sem ferramenta apropriada"]},
-    {"id":"BOT_05","name":"Master Operational","role":"Coordenação operacional","responsibilities":["Coordenar os quatro bots especializados","Controlar etapas, histórico, aprovações e conflitos","Bloquear publicação ou ação externa sem autorização explícita"]},
+    {"id":"BOT_05","name":"Master Operational","role":"Execução e coordenação operacional","responsibilities":["Executar e acompanhar o fluxo persistente dos quatro bots especializados","Controlar fila, etapas, tentativas, histórico, aprovações e conflitos","Pausar ações com custo para aprovação humana","Bloquear publicação ou ação externa sem autorização explícita"]},
 ]
 PLATFORMS = ["Instagram", "TikTok", "Facebook", "Kwai"]
 
@@ -78,8 +78,7 @@ def chat_with_master(message: str, history: list[dict[str, Any]] | None = None) 
             "de forma clara e prática. Ajude o operador a planejar e entender a produção fotográfica "
             "da mesma modelo, preservar aparência natural, organizar tarefas e interpretar o estado "
             "do painel. Não diga que gerou imagens, verificou identidade biometricamente, fez deploy, "
-            "alterou serviços ou executou qualquer ação externa. Você não chama ferramentas, não publica "
-            "conteúdo e não altera dados; descreva quando uma ação depende do painel ou de aprovação humana. "
+            "alterou serviços ou executou qualquer ação externa. A execução real dos bots ocorre pelo executor BOT_05 na área Produção fotográfica do painel: o operador inicia o fluxo ali, e o executor registra etapas e pede aprovação antes de cada geração paga. Esta conversa é apenas o canal de diálogo; não declare que iniciou ou concluiu uma execução sem consultar o estado real do painel. Você não publica conteúdo nem altera serviços externos; publicação continua bloqueada. "
             "Não invente estados de conexão, métricas, resultados nem segredos."
         ),
     }
