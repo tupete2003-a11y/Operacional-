@@ -17,6 +17,7 @@ from .social_workflow import generate_social_workflow, CONTENT_TYPES
 from .llm import ask_agent
 from . import supervisor, tiktok_oauth
 from .connections import get_connection_diagnostics
+from . import model_studio
 
 logger = logging.getLogger("automa_x.ai")
 
@@ -54,6 +55,13 @@ async def auth_check(request: Request):
 
 class ChatRequest(BaseModel):
     message: str = Field(min_length=2, max_length=10000)
+
+class ModelStudioPlanRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=4000)
+    reference_id: str = Field(min_length=1, max_length=200)
+    platform: str = Field(default="Instagram", max_length=40)
+    composition: str = Field(default="group", max_length=40)
+    style: str = Field(default="photorealistic", max_length=60)
 
 class SocialDraftRequest(BaseModel):
     bot_id: str = Field(pattern="^BOT_0[1-5]$")
@@ -119,14 +127,40 @@ def readiness():
             "durable": storage_backend == "postgresql" and database_connected,
         },
         "ai": {"provider": "Groq", "configured": bool(get_groq_api_key())},
-        "bots": {"registered": len(BOTS)},
+        "bots": {"registered": len(model_studio.MODEL_STUDIO_BOTS)},
         "social": {"platforms_registered": len(PLATFORMS), "connected": 0},
         "publishing": {"enabled": False},
     }
 
 @app.get("/agents")
 def agents():
-    return {"total": 31, "orchestrator": {"id": "AGENT_00", "name": "OPERACIONAL", "role": "Coordenador central"}, "specialists": list_agents()}
+    return {"total": len(model_studio.MODEL_STUDIO_BOTS), "orchestrator": {"id": "BOT_05", "name": "Master Operational", "role": "Coordenação central do Model Studio"}, "specialists": model_studio.MODEL_STUDIO_BOTS}
+
+@app.get("/model-studio/status")
+def model_studio_status():
+    return model_studio.dashboard()
+
+@app.get("/model-studio/agents")
+def model_studio_agents():
+    return {"total": len(model_studio.MODEL_STUDIO_BOTS), "agents": model_studio.MODEL_STUDIO_BOTS}
+
+@app.post("/model-studio/plan")
+def model_studio_plan(payload: ModelStudioPlanRequest):
+    try:
+        plan = model_studio.create_production_plan(payload.model_dump())
+        task_id = str(uuid.uuid4())
+        task = {
+            "id": task_id,
+            "request": payload.objective,
+            "status": plan["status"],
+            "plan": {"selected_agents": plan["workflow"], "workflow": "MODEL_STUDIO", "platform": plan["platform"]},
+            "result": plan,
+            "created_at": store.now(),
+        }
+        store.save_task(task)
+        return {"task_id": task_id, **plan}
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 @app.post("/chat")
 def chat(payload: ChatRequest):
@@ -296,7 +330,8 @@ def connections_diagnostics():
 
 @app.get("/social/dashboard")
 def social_home():
-    return social_dashboard()
+    # Compatibility alias: the primary dashboard is now Model Studio.
+    return model_studio.dashboard()
 
 @app.get("/ai/status")
 def ai_status():
