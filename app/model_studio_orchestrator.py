@@ -119,6 +119,19 @@ def executor_status() -> dict[str, Any]:
     }
 
 
+def build_photo_prompt(run: dict[str, Any]) -> str:
+    """Pass BOT_01 and BOT_02 outputs forward to BOT_03 as actual shared context."""
+    results = run.get("result") or {}
+    scene = (results.get("bot_01") or {}).get("content", "")
+    visual = (results.get("bot_02") or {}).get("content", "")
+    return (
+        "Objetivo original do operador: " + str(run.get("objective", "")) +
+        "\\n\\nBriefing do BOT_01 — Scene Planner:\\n" + str(scene)[:3000] +
+        "\\n\\nDireção visual do BOT_02 — Visual Research:\\n" + str(visual)[:3000] +
+        "\\n\\nSiga as decisões dos dois especialistas sem alterar a identidade visual da modelo."
+    )
+
+
 def _save_run(run: dict[str, Any], *, status: str | None = None, current_step: str | None = None,
               result: dict[str, Any] | None = None, error: str | None = None) -> dict[str, Any]:
     updated = {**run, "updated_at": _now()}
@@ -302,7 +315,7 @@ def process_run(run_id: str) -> None:
                     raise model_studio_media.ModelStudioError("A referência desta execução não está mais ativa; envie novamente a referência.")
                 reference_record, reference_bytes = reference
                 image_bytes, model_name = model_studio_media.generate_from_reference(
-                    reference_bytes, objective, run["composition"], run["style"]
+                    reference_bytes, build_photo_prompt(run), run["composition"], run["style"]
                 )
                 generated = model_studio_media.save_generated(
                     image_bytes, reference_record["id"], objective, model_name
