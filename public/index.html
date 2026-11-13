@@ -85,7 +85,7 @@ $("approveGeneration").onclick=async()=>{
   if(!activeRunId)return;
   $("approveGeneration").disabled=true;$("rejectGeneration").disabled=true;
   try{const d=await api("/model-studio/runs/"+activeRunId+"/generation-approval",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({decision:"APPROVE"})});await renderRun(d);if(!runPollHandle)runPollHandle=setInterval(pollRun,4000);await pollRun()}
-  catch(e){$("automationRunStatus").textContent="A aprovação não foi aplicada: "+e.message}
+  catch(e){$("automationRunStatus").textContent="A aprovação não foi aplicada: "+e.message;try{await refreshRun()}catch(_){}}
 };
 $("rejectGeneration").onclick=async()=>{
   if(!activeRunId)return;
