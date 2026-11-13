@@ -150,6 +150,17 @@ def model_studio_agents():
 def model_studio_reference_status():
     return model_studio_media.reference_status()
 
+@app.get("/model-studio/reference/image")
+def model_studio_reference_image():
+    try:
+        reference = model_studio_media.get_reference()
+        if not reference:
+            raise HTTPException(status_code=404, detail="Referência ainda não cadastrada.")
+        record, raw = reference
+        return Response(content=raw, media_type=record["mime_type"], headers={"Cache-Control": "private, no-store"})
+    except model_studio_media.ModelStudioError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
 @app.post("/model-studio/reference")
 async def model_studio_upload_reference(file: UploadFile = File(...)):
     try:
