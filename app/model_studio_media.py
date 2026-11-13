@@ -38,6 +38,8 @@ def _inspect_and_normalize(raw: bytes):
         raise ModelStudioError("A imagem precisa ter conteúdo e no máximo 12 MB.")
     try:
         with Image.open(io.BytesIO(raw)) as im:
+            if im.width * im.height > 40000000:
+                raise ModelStudioError("A imagem excede o limite seguro de pixels.")
             fmt = (im.format or "").upper()
             if fmt not in ALLOWED_FORMATS:
                 raise ModelStudioError("Formato não aceito. Envie JPEG, PNG ou WEBP.")
