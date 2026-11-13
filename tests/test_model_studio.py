@@ -19,6 +19,8 @@ class ModelStudioTests(unittest.TestCase):
         self.assertEqual(status["project"], "AUTOMA X — MODEL STUDIO")
         self.assertFalse(status["image_generation"]["generation_enabled"])
         self.assertFalse(status["publishing"]["enabled"])
+        self.assertIn("configured", status["chat"])
+        self.assertFalse(status["chat"]["verified"])
 
     def test_plan_requires_reference(self):
         with self.assertRaises(ValueError):
