@@ -38,8 +38,9 @@ async function renderRun(d){
   const image=(bot3&&bot3.output)||((d.result||{}).image)||{};
   if(image.image_id){
     generatedId=image.image_id;
-    $("approveImage").disabled=false;
-    $("rejectImage").disabled=false;
+    const canReview=d.status==="WAITING_REVIEW";
+    $("approveImage").disabled=!canReview;
+    $("rejectImage").disabled=!canReview;
     if(!$("generatedPreview").src||$("generatedPreview").hidden){
       try{const blob=await api("/model-studio/images/"+generatedId);$("generatedPreview").src=URL.createObjectURL(blob);$("generatedPreview").hidden=false}catch(e){$("qualityResult").textContent="Imagem registrada; prévia indisponível: "+e.message}
     }
