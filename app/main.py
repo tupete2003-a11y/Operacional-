@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from . import store
-from .orchestrator import submit_request
 from .config import get_groq_api_key, get_groq_env_names
 from .llm import ask_agent
 from . import supervisor, tiktok_oauth
@@ -245,11 +244,27 @@ def model_studio_plan(payload: ModelStudioPlanRequest):
 
 @app.post("/chat")
 def chat(payload: ChatRequest):
+    """Conversa com BOT_05 e persiste o histórico; não executa ações externas."""
+    history = store.get_messages(limit=10)
     store.add_message("user", payload.message)
-    task = submit_request(payload.message)
-    response = {"task_id": task["id"], "status": task["status"], "operational_agent": "AGENT_00", "agents_selected": task["plan"]["selected_agents"], "plan": task["plan"], "result": task["result"]}
-    store.add_message("assistant", f"Plano {task['id']} criado com status {task['status']}.")
-    return response
+    try:
+        answer = model_studio.chat_with_master(payload.message, history)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except Exception as exc:
+        logger.warning("Chat BOT_05 indisponível: %s", type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="O chat está acessível, mas o provedor de IA não conseguiu responder. Confira a configuração GROQ_API_KEY e o limite de uso."
+        ) from exc
+    store.add_message("assistant", answer)
+    return {
+        "role": "assistant",
+        "bot_id": "BOT_05",
+        "bot_name": "Master Operational",
+        "content": answer,
+        "created_at": store.now(),
+    }
 
 @app.get("/tasks")
 def tasks():
