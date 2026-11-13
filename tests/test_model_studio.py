@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from app import model_studio, model_studio_media, store
+from app import model_studio, model_studio_media, model_studio_orchestrator, store
 from PIL import Image
 import io
 
@@ -82,6 +82,47 @@ class ModelStudioTests(unittest.TestCase):
                 "reference_id": "reference-approved-01",
                 "platform": "YouTube",
             })
+
+
+    def test_executor_tables_are_persistent(self):
+        store.init_db()
+        with store.connect() as conn:
+            runs = conn.execute("PRAGMA table_info(agent_runs)").fetchall()
+            steps = conn.execute("PRAGMA table_info(agent_run_steps)").fetchall()
+        self.assertIn("status", {row["name"] for row in runs})
+        self.assertIn("attempt", {row["name"] for row in steps})
+        self.assertIn("output_json", {row["name"] for row in steps})
+
+    @patch("app.model_studio_orchestrator.model_studio_media.reference_status")
+    @patch("app.model_studio_orchestrator.ask_agent")
+    def test_bot05_executes_planning_steps_then_pauses_for_paid_approval(self, mocked_ask, mocked_reference):
+        store.init_db()
+        mocked_reference.return_value = {"registered": True, "reference_id": "reference-test"}
+        mocked_ask.return_value = "Briefing concluído."
+        run = model_studio_orchestrator.create_run(
+            "Criar fotografia natural em um café", "group", "photorealistic"
+        )
+        model_studio_orchestrator.process_run(run["id"])
+        current = model_studio_orchestrator.get_run(run["id"])
+        self.assertEqual(current["status"], "WAITING_APPROVAL")
+        self.assertEqual([step["status"] for step in current["steps"][:2]], ["SUCCEEDED", "SUCCEEDED"])
+        self.assertEqual(current["steps"][2]["status"], "WAITING_APPROVAL")
+        self.assertFalse(current["publishing"]["enabled"])
+        self.assertEqual(mocked_ask.call_count, 2)
+
+    @patch("app.model_studio_orchestrator.model_studio_media.reference_status")
+    @patch("app.model_studio_orchestrator.ask_agent")
+    def test_rejecting_paid_generation_stops_run_without_image_call(self, mocked_ask, mocked_reference):
+        store.init_db()
+        mocked_reference.return_value = {"registered": True, "reference_id": "reference-test"}
+        mocked_ask.return_value = "Etapa concluída."
+        run = model_studio_orchestrator.create_run(
+            "Criar fotografia natural em um jardim", "group", "photorealistic"
+        )
+        model_studio_orchestrator.process_run(run["id"])
+        rejected = model_studio_orchestrator.approve_generation(run["id"], "REJECT")
+        self.assertEqual(rejected["status"], "REJECTED")
+        self.assertEqual(rejected["steps"][2]["status"], "SKIPPED")
 
 
 if __name__ == "__main__":
