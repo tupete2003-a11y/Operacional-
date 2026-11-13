@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 import secrets
 import uuid
@@ -64,6 +65,10 @@ class ModelStudioGenerateRequest(BaseModel):
     objective: str = Field(min_length=5, max_length=2000)
     composition: str = Field(default="group", max_length=40)
     style: str = Field(default="photorealistic", max_length=60)
+
+class ModelStudioReviewRequest(BaseModel):
+    decision: str = Field(pattern="^(APPROVE|REJECT)$")
+    note: str = Field(default="", max_length=1000)
 
 class SocialDraftRequest(BaseModel):
     bot_id: str = Field(pattern="^BOT_0[1-5]$")
@@ -190,6 +195,24 @@ def model_studio_generate(payload: ModelStudioGenerateRequest):
                 "identity_review": "A confirmação de que é a mesma modelo exige revisão visual humana."}
     except model_studio_media.ModelStudioError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
+
+@app.get("/model-studio/images/{image_id}/quality")
+def model_studio_image_quality(image_id: str):
+    loaded = model_studio_media.load_generated(image_id)
+    if not loaded:
+        raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+    record, _ = loaded
+    return {"image_id": image_id, "quality": json.loads(record["quality_json"]),
+            "review_status": record.get("review_status", "PENDING"),
+            "review_note": record.get("review_note")}
+
+@app.post("/model-studio/images/{image_id}/review")
+def model_studio_review_image(image_id: str, payload: ModelStudioReviewRequest):
+    status = "APPROVED" if payload.decision == "APPROVE" else "REJECTED"
+    if not store.review_model_generated_image(image_id, status, payload.note):
+        raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+    return {"image_id": image_id, "review_status": status,
+            "note": "Revisão humana registrada. Isso não executa publicação externa."}
 
 @app.get("/model-studio/images/{image_id}")
 def model_studio_get_image(image_id: str):
