@@ -247,7 +247,7 @@ def system_status():
         },
         "bots": {
             "registered": len(BOTS),
-            "ids": [bot["id"] for bot in BOTS],
+            "ids": [bot["id"] for bot in model_studio.MODEL_STUDIO_BOTS],
             "execution_verified": False,
             "note": "Cadastro não equivale a execução validada de ponta a ponta.",
         },
@@ -361,78 +361,16 @@ def ai_status():
 
 @app.get("/social/agents")
 def social_agents():
-    return {"total": len(BOTS), "agents": BOTS}
+    return {"total": len(model_studio.MODEL_STUDIO_BOTS), "agents": model_studio.MODEL_STUDIO_BOTS}
 
 @app.post("/social/draft")
 def social_draft(payload: SocialDraftRequest):
-    if payload.bot_id not in ("BOT_02", "BOT_03"):
-        raise HTTPException(status_code=400, detail="Este bot não é responsável por gerar conteúdo.")
-    if not get_groq_api_key():
-        raise HTTPException(status_code=503, detail="IA ainda não configurada. O painel funciona, mas adicione um provedor de IA ao serviço da API para gerar conteúdo.")
-    bot = next(item for item in BOTS if item["id"] == payload.bot_id)
-    agent = {"id": bot["id"], "name": bot["name"], "function": bot["description"] + " Responsabilidades: " + "; ".join(bot["responsibilities"])}
-    prompt = "Plataforma: " + payload.platform + "\nObjetivo: " + payload.objective + "\nCrie um pacote de conteúdo pronto para revisão humana, com gancho, roteiro/legenda, descrição, hashtags e CTA. Não afirme que publicou."
-    try:
-        draft = ask_agent(agent, prompt)
-        task_id = str(uuid.uuid4())
-        approval_id = str(uuid.uuid4())
-        created_at = store.now()
-        task = {
-            "id": task_id,
-            "request": payload.objective,
-            "status": "DRAFT_REVIEW",
-            "plan": {"selected_agents": [bot["id"]], "platform": payload.platform, "workflow": "SOCIAL_CONTENT"},
-            "result": {"draft": draft, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform},
-            "created_at": created_at
-        }
-        store.save_task(task)
-        store.create_approval(approval_id, task_id, "Revisar rascunho de " + payload.platform + " · " + bot["name"])
-        return {"task_id": task_id, "approval_id": approval_id, "bot_id": bot["id"], "bot_name": bot["name"], "platform": payload.platform, "draft": draft, "status": "DRAFT_REVIEW", "approval_required": True}
-    except Exception as exc:
-        logger.error("Falha ao gerar rascunho com IA: %s", str(exc)[:500])
-        key = get_groq_api_key()
-        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
-        raise HTTPException(status_code=502, detail="Falha na geração: " + safe_detail[:500])
+    raise HTTPException(status_code=410, detail="Fluxo antigo de campanhas desativado. Utilize /model-studio/plan.")
 
 
 @app.post("/social/workflow")
 def social_workflow(payload: SocialWorkflowRequest):
-    unknown_platforms = sorted(set(payload.platforms) - set(PLATFORMS))
-    if unknown_platforms:
-        raise HTTPException(
-            status_code=422,
-            detail={"message": "Plataforma não suportada.", "invalid_platforms": unknown_platforms},
-        )
-
-    unknown_content_types = sorted(set(payload.content_types) - set(CONTENT_TYPES))
-    if unknown_content_types:
-        raise HTTPException(
-            status_code=422,
-            detail={"message": "Formato de conteúdo não suportado.", "invalid_content_types": unknown_content_types},
-        )
-
-    if len(set(payload.platforms)) != len(payload.platforms):
-        raise HTTPException(status_code=422, detail="Não repita plataformas na mesma solicitação.")
-    if len(set(payload.content_types)) != len(payload.content_types):
-        raise HTTPException(status_code=422, detail="Não repita formatos na mesma solicitação.")
-
-    if not get_groq_api_key():
-        raise HTTPException(
-            status_code=503,
-            detail="IA ainda não configurada. Adicione GROQ_API_KEY nas variáveis do serviço da API.",
-        )
-
-    try:
-        result = generate_social_workflow(payload.model_dump())
-        return result
-    except Exception as exc:
-        logger.error("Falha no fluxo dos cinco bots: %s", str(exc)[:500])
-        key = get_groq_api_key()
-        safe_detail = str(exc).replace(key, "[REDACTED]") if key else str(exc)
-        raise HTTPException(
-            status_code=502,
-            detail="Falha no fluxo dos cinco bots: " + safe_detail[:500],
-        )
+    raise HTTPException(status_code=410, detail="Fluxo antigo de campanhas substituído pelo AUTOMA X — MODEL STUDIO.")
 
 # Wrap the complete ASGI app so CORS handles browser preflight before API-key middleware.
 app = CORSMiddleware(app, allow_origins=["*"], allow_credentials=False, allow_methods=["*"], allow_headers=["*"])
