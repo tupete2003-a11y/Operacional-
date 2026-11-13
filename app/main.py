@@ -14,7 +14,7 @@ from .config import get_groq_api_key, get_groq_env_names
 from .llm import ask_agent
 from . import supervisor, tiktok_oauth
 from .connections import get_connection_diagnostics
-from . import model_studio, model_studio_media
+from . import model_studio, model_studio_media, model_studio_orchestrator
 
 logger = logging.getLogger("automa_x.ai")
 
@@ -69,6 +69,14 @@ class ModelStudioReviewRequest(BaseModel):
     decision: str = Field(pattern="^(APPROVE|REJECT)$")
     note: str = Field(default="", max_length=1000)
 
+class ModelStudioRunRequest(BaseModel):
+    objective: str = Field(min_length=5, max_length=2000)
+    composition: str = Field(default="group", max_length=80)
+    style: str = Field(default="photorealistic", max_length=100)
+
+class ModelStudioGenerationApprovalRequest(BaseModel):
+    decision: str = Field(pattern="^(APPROVE|REJECT)$")
+
 class SocialDraftRequest(BaseModel):
     bot_id: str = Field(pattern="^BOT_0[1-5]$")
     objective: str = Field(min_length=5, max_length=4000)
@@ -95,6 +103,7 @@ def startup():
         raise RuntimeError("API_ACCESS_TOKEN precisa estar configurado")
     store.init_db()
     supervisor.start_background_supervisor()
+    model_studio_orchestrator.start_background_executor()
 
 @app.get("/")
 def root():
@@ -144,7 +153,54 @@ def agents():
 
 @app.get("/model-studio/status")
 def model_studio_status():
-    return model_studio.dashboard()
+    result = model_studio.dashboard()
+    result["executor"] = model_studio_orchestrator.executor_status()
+    return result
+
+@app.get("/model-studio/automation/status")
+def model_studio_automation_status():
+    return model_studio_orchestrator.executor_status()
+
+@app.get("/model-studio/runs")
+def model_studio_runs(limit: int = 20):
+    return {"runs": model_studio_orchestrator.list_runs(limit)}
+
+@app.post("/model-studio/runs")
+def model_studio_create_run(payload: ModelStudioRunRequest):
+    try:
+        return model_studio_orchestrator.create_run(
+            payload.objective, payload.composition, payload.style
+        )
+    except ValueError as exc:
+        status = 409 if "referência" in str(exc).lower() else 422
+        raise HTTPException(status_code=status, detail=str(exc))
+
+@app.get("/model-studio/runs/{run_id}")
+def model_studio_run_detail(run_id: str):
+    run = model_studio_orchestrator.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Execução não encontrada.")
+    return run
+
+@app.post("/model-studio/runs/{run_id}/generation-approval")
+def model_studio_generation_approval(run_id: str, payload: ModelStudioGenerationApprovalRequest):
+    try:
+        return model_studio_orchestrator.approve_generation(run_id, payload.decision)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+@app.post("/model-studio/runs/{run_id}/retry")
+def model_studio_retry_run(run_id: str):
+    try:
+        return model_studio_orchestrator.retry_failed_run(run_id)
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 @app.get("/model-studio/agents")
 def model_studio_agents():
@@ -210,7 +266,9 @@ def model_studio_review_image(image_id: str, payload: ModelStudioReviewRequest):
     status = "APPROVED" if payload.decision == "APPROVE" else "REJECTED"
     if not store.review_model_generated_image(image_id, status, payload.note):
         raise HTTPException(status_code=404, detail="Imagem não encontrada.")
+    run = model_studio_orchestrator.record_identity_review(image_id, payload.decision, payload.note)
     return {"image_id": image_id, "review_status": status,
+            "run_status": run.get("status") if run else None,
             "note": "Revisão humana registrada. Isso não executa publicação externa."}
 
 @app.get("/model-studio/images/{image_id}")
