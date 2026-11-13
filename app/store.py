@@ -49,7 +49,7 @@ def init_db():
         ]
     statements.extend([
         "CREATE TABLE IF NOT EXISTS model_references (id TEXT PRIMARY KEY, mime_type TEXT NOT NULL, encrypted_data BYTEA, sha256 TEXT NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, created_at TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1)",
-        "CREATE TABLE IF NOT EXISTS model_generated_images (id TEXT PRIMARY KEY, reference_id TEXT NOT NULL, mime_type TEXT NOT NULL, encrypted_data BYTEA NOT NULL, quality_json TEXT NOT NULL, objective TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS model_generated_images (id TEXT PRIMARY KEY, reference_id TEXT NOT NULL, mime_type TEXT NOT NULL, encrypted_data BYTEA NOT NULL, quality_json TEXT NOT NULL, objective TEXT NOT NULL, model TEXT NOT NULL, created_at TEXT NOT NULL, review_status TEXT NOT NULL DEFAULT 'PENDING', review_note TEXT)",
         "CREATE TABLE IF NOT EXISTS oauth_states (state_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL)",
         "CREATE TABLE IF NOT EXISTS social_connections (platform TEXT PRIMARY KEY, access_token_encrypted TEXT NOT NULL, refresh_token_encrypted TEXT NOT NULL, open_id TEXT, scopes TEXT NOT NULL, expires_at TEXT, updated_at TEXT NOT NULL)",
     ])
@@ -216,7 +216,7 @@ def get_model_reference(reference_id=None):
 
 def save_model_generated_image(image_id, reference_id, mime_type, encrypted_data, quality_json, objective, model):
     with connect() as conn:
-        _execute(conn, "INSERT INTO model_generated_images(id, reference_id, mime_type, encrypted_data, quality_json, objective, model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        _execute(conn, "INSERT INTO model_generated_images(id, reference_id, mime_type, encrypted_data, quality_json, objective, model, created_at, review_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING')",
             (image_id, reference_id, mime_type, encrypted_data, quality_json, objective, model, now()))
 
 
@@ -224,3 +224,10 @@ def get_model_generated_image(image_id):
     with connect() as conn:
         row = _execute(conn, "SELECT * FROM model_generated_images WHERE id=?", (image_id,)).fetchone()
     return dict(row) if row else None
+
+
+def review_model_generated_image(image_id, status, note=""):
+    with connect() as conn:
+        cur = _execute(conn, "UPDATE model_generated_images SET review_status=?, review_note=? WHERE id=?",
+            (status, note[:1000], image_id))
+        return cur.rowcount > 0
