@@ -18,16 +18,18 @@ PLATFORMS = ["Instagram", "TikTok", "Facebook", "Kwai"]
 def provider_status() -> dict[str, Any]:
     """Presence-only diagnostic; never returns secret values."""
     import os
-    provider = os.getenv("IMAGE_GENERATION_PROVIDER", "").strip()
-    api_key = os.getenv("IMAGE_GENERATION_API_KEY", "").strip()
-    base_url = os.getenv("IMAGE_GENERATION_BASE_URL", "").strip()
-    configured = bool(provider and api_key)
+    provider = "openai"
+    api_key = os.getenv("OPENAI_API_KEY", "").strip()
+    encryption_key = os.getenv("AUTOMA_TOKEN_ENCRYPTION_KEY", "").strip()
+    configured = bool(api_key)
+    storage_configured = bool(encryption_key and os.getenv("DATABASE_URL", "").strip())
     return {
-        "provider": provider or None,
+        "provider": provider,
+        "model": os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-2.5-sunburst"),
         "configured": configured,
-        "base_url_configured": bool(base_url),
-        "generation_enabled": False,
-        "reason": "Adapter/provider integration and end-to-end validation are still required.",
+        "secure_storage_configured": storage_configured,
+        "generation_enabled": configured and storage_configured,
+        "reason": None if configured and storage_configured else "Configure OPENAI_API_KEY, AUTOMA_TOKEN_ENCRYPTION_KEY e DATABASE_URL no serviço de API do Render.",
     }
 
 def dashboard() -> dict[str, Any]:
@@ -36,7 +38,7 @@ def dashboard() -> dict[str, Any]:
         "mode": "model_photo_studio",
         "bots": {"total": len(MODEL_STUDIO_BOTS), "items": MODEL_STUDIO_BOTS},
         "production": {"frequency": "daily", "style": "photorealistic", "composition": "group", "platforms": PLATFORMS},
-        "reference_model": {"registered": False, "status": "awaiting_reference_upload"},
+        "reference_model": __import__("app.model_studio_media", fromlist=["reference_status"]).reference_status(),
         "image_generation": provider_status(),
         "publishing": {"enabled": False, "approval_required": True},
         "updated_at": datetime.now(timezone.utc).isoformat(),
