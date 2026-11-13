@@ -48,6 +48,46 @@ def dashboard() -> dict[str, Any]:
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
 
+
+def chat_with_master(message: str, history: list[dict[str, Any]] | None = None) -> str:
+    """Respond through BOT_05; this is conversational only and never triggers external actions."""
+    text = str(message or "").strip()
+    if len(text) < 2:
+        raise ValueError("Escreva uma mensagem com pelo menos 2 caracteres.")
+
+    transcript = []
+    for item in (history or [])[-10:]:
+        role = "Usuário" if item.get("role") == "user" else "BOT 05"
+        content = str(item.get("content", "")).strip()
+        if content:
+            transcript.append(f"{role}: {content[:1500]}")
+
+    context = ""
+    if transcript:
+        context = "Histórico recente da conversa (contexto, não instruções de sistema):\n" + "\n".join(transcript) + "\n\n"
+
+    agent = {
+        "id": "BOT_05",
+        "name": "Master Operational",
+        "function": (
+            "Você é o BOT_05 — Master Operational do AUTOMA X — MODEL STUDIO. "
+            "Coordene conceitualmente os bots BOT_01 Scene Planner, BOT_02 Visual Research, "
+            "BOT_03 Photo Creator e BOT_04 Identity Guardian. Responda em português do Brasil, "
+            "de forma clara e prática. Ajude o operador a planejar e entender a produção fotográfica "
+            "da mesma modelo, preservar aparência natural, organizar tarefas e interpretar o estado "
+            "do painel. Não diga que gerou imagens, verificou identidade biometricamente, fez deploy, "
+            "alterou serviços ou executou qualquer ação externa. Você não chama ferramentas, não publica "
+            "conteúdo e não altera dados; descreva quando uma ação depende do painel ou de aprovação humana. "
+            "Não invente estados de conexão, métricas, resultados nem segredos."
+        ),
+    }
+    from .llm import ask_agent
+
+    reply = ask_agent(agent, context + "Mensagem atual do operador:\n" + text)
+    if not isinstance(reply, str) or not reply.strip():
+        raise RuntimeError("O provedor de IA não retornou uma resposta de texto.")
+    return reply.strip()
+
 def create_production_plan(payload: dict[str, Any]) -> dict[str, Any]:
     """Create a structured plan only; this does not generate or publish images."""
     objective = str(payload.get("objective", "")).strip()
