@@ -33,12 +33,16 @@ def provider_status() -> dict[str, Any]:
     }
 
 def dashboard() -> dict[str, Any]:
+    try:
+        reference = __import__("app.model_studio_media", fromlist=["reference_status"]).reference_status()
+    except Exception:
+        reference = {"registered": False, "status": "storage_unavailable"}
     return {
         "project": "AUTOMA X — MODEL STUDIO",
         "mode": "model_photo_studio",
         "bots": {"total": len(MODEL_STUDIO_BOTS), "items": MODEL_STUDIO_BOTS},
         "production": {"frequency": "daily", "style": "photorealistic", "composition": "group", "platforms": PLATFORMS},
-        "reference_model": __import__("app.model_studio_media", fromlist=["reference_status"]).reference_status(),
+        "reference_model": reference,
         "image_generation": provider_status(),
         "publishing": {"enabled": False, "approval_required": True},
         "updated_at": datetime.now(timezone.utc).isoformat(),
