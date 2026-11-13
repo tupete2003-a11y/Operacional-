@@ -1,6 +1,8 @@
 import unittest
 
-from app import model_studio
+from app import model_studio, model_studio_media
+from PIL import Image
+import io
 
 
 class ModelStudioTests(unittest.TestCase):
@@ -30,6 +32,19 @@ class ModelStudioTests(unittest.TestCase):
         self.assertEqual(plan["status"], "PLANNED_REFERENCE_REQUIRED")
         self.assertFalse(plan["generation"]["started"])
         self.assertFalse(plan["publishing"]["started"])
+
+
+    def test_reference_image_is_normalized_and_quality_checked(self):
+        buffer = io.BytesIO()
+        Image.new("RGB", (900, 900), (120, 130, 140)).save(buffer, format="PNG")
+        normalized, mime, width, height = model_studio_media._inspect_and_normalize(buffer.getvalue())
+        self.assertEqual(mime, "image/jpeg")
+        self.assertEqual((width, height), (900, 900))
+        self.assertEqual(model_studio_media._quality_report(normalized)["identity_consistency"], "NOT_AUTOMATICALLY_VERIFIED")
+
+    def test_unsupported_image_is_rejected(self):
+        with self.assertRaises(model_studio_media.ModelStudioError):
+            model_studio_media._inspect_and_normalize(b"not an image")
 
     def test_unknown_platform_is_rejected(self):
         with self.assertRaises(ValueError):
