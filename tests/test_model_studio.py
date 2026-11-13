@@ -1,6 +1,6 @@
 import unittest
 
-from app import model_studio, model_studio_media
+from app import model_studio, model_studio_media, store
 from PIL import Image
 import io
 
@@ -45,6 +45,16 @@ class ModelStudioTests(unittest.TestCase):
     def test_unsupported_image_is_rejected(self):
         with self.assertRaises(model_studio_media.ModelStudioError):
             model_studio_media._inspect_and_normalize(b"not an image")
+
+
+    def test_media_tables_initialize_with_review_state(self):
+        store.init_db()
+        with store.connect() as conn:
+            rows = conn.execute("PRAGMA table_info(model_generated_images)").fetchall()
+        columns = {row["name"] for row in rows}
+        self.assertIn("encrypted_data", columns)
+        self.assertIn("review_status", columns)
+        self.assertIn("review_note", columns)
 
     def test_unknown_platform_is_rejected(self):
         with self.assertRaises(ValueError):
