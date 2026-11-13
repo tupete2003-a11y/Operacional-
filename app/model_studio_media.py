@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 
 from cryptography.fernet import Fernet, InvalidToken
-from PIL import Image, ImageStat, UnidentifiedImageError
+from PIL import Image, ImageFilter, ImageStat, UnidentifiedImageError
 
 from . import store
 
@@ -92,17 +92,18 @@ def _quality_report(raw: bytes):
             width, height = im.size
             gray = im.convert("L")
             contrast = round(float(ImageStat.Stat(gray).stddev[0]), 2)
-            edge = gray.filter(Image.Filter.FIND_EDGES) if False else gray
+            edge_score = round(float(ImageStat.Stat(gray.filter(ImageFilter.FIND_EDGES)).mean[0]), 2)
             checks = {
                 "readable_image": True,
                 "minimum_resolution": width >= 768 and height >= 768,
                 "reasonable_contrast": contrast >= 8,
+                "edge_detail_present": edge_score >= 1,
                 "file_size_ok": len(raw) <= MAX_IMAGE_BYTES * 2,
             }
             passed = all(checks.values())
             return {
                 "status": "PASS_WITH_HUMAN_REVIEW" if passed else "REVIEW_REQUIRED",
-                "width": width, "height": height, "contrast_score": contrast,
+                "width": width, "height": height, "contrast_score": contrast, "edge_detail_score": edge_score,
                 "checks": checks,
                 "identity_consistency": "NOT_AUTOMATICALLY_VERIFIED",
                 "human_identity_review_required": True,
