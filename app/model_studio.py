@@ -5,6 +5,7 @@ before a generation adapter can be enabled. Reference-image bytes are not stored
 """
 from datetime import datetime, timezone
 from typing import Any
+from .config import get_groq_api_key
 
 MODEL_STUDIO_BOTS = [
     {"id":"BOT_01","name":"Scene Planner","role":"Planejamento de cenas","responsibilities":["Planejar uma produção visual diária","Definir cenário, figurino, pose, enquadramento e iluminação","Montar briefings para os demais bots"]},
@@ -44,6 +45,7 @@ def dashboard() -> dict[str, Any]:
         "production": {"frequency": "daily", "style": "photorealistic", "composition": "group", "platforms": PLATFORMS},
         "reference_model": reference,
         "image_generation": provider_status(),
+        "chat": {"provider": "Groq", "configured": bool(get_groq_api_key()), "verified": False},
         "publishing": {"enabled": False, "approval_required": True},
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
