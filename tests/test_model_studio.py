@@ -84,6 +84,18 @@ class ModelStudioTests(unittest.TestCase):
             })
 
 
+    def test_bot03_receives_shared_context_from_bot01_and_bot02(self):
+        prompt = model_studio_orchestrator.build_photo_prompt({
+            "objective": "Foto natural em um café",
+            "result": {
+                "bot_01": {"content": "Luz lateral suave e pose espontânea."},
+                "bot_02": {"content": "Paleta terrosa e ambiente acolhedor."},
+            },
+        })
+        self.assertIn("Luz lateral suave", prompt)
+        self.assertIn("Paleta terrosa", prompt)
+        self.assertIn("Foto natural em um café", prompt)
+
     def test_executor_tables_are_persistent(self):
         store.init_db()
         with store.connect() as conn:
